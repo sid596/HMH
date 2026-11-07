@@ -13,7 +13,9 @@ python -m pip install -r requirements.txt
 streamlit run app/main.py
 ```
 
-Scripted walkthrough works without keys. It exercises the flow with predefined evidence and is explicitly not a semantic assessment. Choose the nodding persona to see retries and escalation; attentive passes all demo checks.
+Voice conversation is the default. Click **Start conversation**, listen to Nalini, tap the microphone to record, and stop when finished. Prisma transcription, rubric assessment, and Nalini's next response run automatically. Recordings longer than 30 seconds are rejected locally. Separate listening and speaking language settings allow auto-detection for Prisma while Timbre uses a supported voice/language pair. Browser autoplay policies may require pressing play once.
+
+Scripted walkthrough is available in the sidebar and works without keys. It exercises the flow with predefined evidence and is explicitly not a semantic assessment. Choose the nodding persona to see retries and escalation; attentive passes all demo checks.
 
 For live requests, run `python scripts/configure.py` in your terminal. It prompts for keys without displaying them and saves `.hmh-secrets.json` locally with owner-only permissions, ignored by Git. The app loads it on launch. Never share that file.
 
@@ -31,7 +33,7 @@ export SCORER_BASE_URL='https://api.openai.com/v1'
 
 `.env.example` documents variable names; the app does not automatically load `.env`. Never commit keys. Live semantic scoring needs a separate compatible model provider; Gnani challenge credits do not imply access to that provider. Evon hosting is not implemented.
 
-The browser microphone is for synthetic scripted speech only. Live flow: Timbre speaks the prompt → record a fictional customer's teach-back → Prisma transcribes → semantic scorer extracts rubric evidence → plain Python policy passes/retries/escalates. Typed input is labelled separately. API failures never record a pass. Calls are explicit and have no automatic billable retries. Voice-language compatibility must be checked against the account's voice catalog.
+The browser microphone is for synthetic scripted speech only. Live flow: Timbre speaks the prompt → record a fictional customer's teach-back → Prisma transcribes → semantic scorer extracts rubric evidence → plain Python policy passes/retries/escalates. API failures never record a pass. Each new recording triggers one assessment automatically. Failed requests require an explicit retry; a scorer retry reuses a successful transcript. UI reruns do not automatically retry failed API calls. Timbre audio is reused within each turn. Voice-language compatibility must be checked against the account's voice catalog.
 
 ## Policy and review
 
@@ -55,3 +57,16 @@ See `eval/README.md` for human labelling and baseline-first evaluation. No real 
 - [Gnani quick start](https://docs.gnani.ai/api/introduction/quick-start): REST Prisma v3.0 transcription and Timbre v2.5 synthesis adapters.
 
 Real API response shape, account model access, credit cost and scorer quality remain unverified until keys are configured and live probes run. `ffmpeg` was not installed at setup; this comprehension prototype does not need it.
+
+## Streamlit Cloud keys
+
+Add these top-level values in the app settings → Secrets (never commit actual keys):
+
+```toml
+GNANI_API_KEY = "your-gnani-key"
+SCORER_API_KEY = "your-text-model-key"
+SCORER_MODEL = "gpt-5.4-mini"
+SCORER_BASE_URL = "https://api.openai.com/v1"
+```
+
+Restart after configuration. The voice Start button stays disabled until all required values are present. Tests mock speech/scorer calls; browser microphone, autoplay, real API access and semantic accuracy still require a live check.

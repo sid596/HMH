@@ -5,6 +5,7 @@ import json
 import os
 import streamlit as st
 from engine.core import Session, load_pack
+from engine.conversation import Conversation
 from engine.scorer import score, fixture_evidence
 from voice.gnani import transcribe, synthesize
 
@@ -21,10 +22,11 @@ st.write("A recorded yes is only the beginning. Ask customers to explain key ter
 pack = load_pack(ROOT / "packs/fictional_savings_v1.json")
 with st.sidebar:
     st.header("Session setup")
-    mode = st.selectbox("Assessment mode", ["Scripted walkthrough", "Live semantic scorer"], disabled="session" in st.session_state)
+    mode = st.selectbox("Assessment mode", ["Voice conversation", "Scripted walkthrough"], disabled="session" in st.session_state)
     st.caption("Scripted mode uses predefined answers and evidence; it does not evaluate speech or arbitrary text.")
-    language = st.selectbox("Prisma language hint", ["hi-IN", "en-IN", "mr-IN", "kn-IN", "indic-auto"])
-    voice = st.text_input("Timbre voice", "Nalini", help="Use a voice supported for your selected language in the Gnani console.")
+    language = st.selectbox("Prisma language hint", ["hi-IN", "en-IN", "mr-IN", "kn-IN", "indic-auto"], disabled="session" in st.session_state)
+    tts_language = st.selectbox("Speaking language", ["hi-IN", "hi-en", "en-IN", "mr-IN", "kn-IN"], disabled="session" in st.session_state)
+    voice = st.text_input("Timbre voice", "Nalini", help="Timbre v2.5: Hindi Nalini, Hinglish Poorvi, English Pranav, Marathi Ishaan, Kannada Kavin.", disabled="session" in st.session_state)
     st.write("Gnani key: " + ("configured" if os.getenv("GNANI_API_KEY") else "missing"))
     st.write("Semantic scorer: " + ("configured" if os.getenv("SCORER_API_KEY") and os.getenv("SCORER_MODEL") else "missing"))
     if st.button("Reset session"):
@@ -38,8 +40,20 @@ with st.sidebar:
 st.warning("Draft rubric: human review pending. All amounts and terms are invented. This demo cannot certify legal consent or prove understanding.")
 if "session" not in st.session_state:
     st.info(pack["disclosure"])
-    if st.button("Start disclosed demo session", type="primary"):
-        st.session_state.session = Session(pack, ROOT / "data", "scripted" if mode == "Scripted walkthrough" else "live")
+    ready = all(os.getenv(k) for k in ("GNANI_API_KEY", "SCORER_API_KEY", "SCORER_MODEL"))
+    if mode == "Voice conversation":
+        st.write("Nalini asks aloud. Tap the microphone, answer in your own words, then stop recording. Assessment and the next spoken response happen automatically.")
+        st.caption("Allow microphone access. If your browser blocks automatic playback, press play on the audio player. Keep each synthetic answer under 30 seconds.")
+        if not ready:
+            st.info("Configure GNANI_API_KEY, SCORER_API_KEY and SCORER_MODEL in Streamlit Secrets to start voice conversation.")
+    label = "Start conversation" if mode == "Voice conversation" else "Start disclosed demo session"
+    if st.button(label, type="primary", disabled=mode == "Voice conversation" and not ready):
+        if mode == "Voice conversation":
+            conversation = Conversation(pack, ROOT / "data", language, tts_language, voice)
+            st.session_state.conversation = conversation
+            st.session_state.session = conversation.session
+        else:
+            st.session_state.session = Session(pack, ROOT / "data", "scripted")
         st.rerun()
     st.stop()
 
@@ -58,19 +72,6 @@ else:
     explanation = c["fallback_explain"] if session.attempt >= 2 else c["explain"]
     st.write(explanation)
     st.info(c["question"])
-    if st.button("Speak disclosure and prompt with Timbre" if not session.results and session.attempt == 0 else "Speak prompt with Timbre"):
-        try:
-            text = explanation + " " + c["question"]
-            if not session.results and session.attempt == 0:
-                text = pack["disclosure"] + " " + text
-            with st.spinner("Synthesizing with Timbre…"):
-                audio = synthesize(text, language=language, voice=voice)
-            st.audio(audio, format="audio/wav")
-            session.audit.append("tts_generated", clause_id=c["id"], text=text, language=language, voice=voice)
-        except Exception as exc:
-            st.error(f"Speech generation failed ({type(exc).__name__}). Check local configuration and API access.")
-            session.audit.append("tts_failed", error_type=type(exc).__name__)
-
     if session.mode == "scripted":
         persona = st.selectbox("Synthetic response", ["nods_along", "attentive", "partial", "misconception"])
         answer, evidence = fixture_evidence(c, persona)
@@ -79,40 +80,44 @@ else:
             session.submit(answer, evidence, source="scripted_fixture")
             st.rerun()
     else:
-        st.caption("Use synthetic customer speech only. Do not upload real calls or personal information. Prisma transcripts are the scorer's input and can contain recognition errors.")
-        audio = st.audio_input("Record a synthetic teach-back response", key=f"audio_{session.index}_{session.attempt}")
-        if st.button("Transcribe recording with Prisma", disabled=audio is None):
-            try:
-                with st.spinner("Transcribing with Prisma…"):
-                    result = transcribe(audio.getvalue(), language=language)
-                st.session_state["transcript"] = result["transcript"]
-                st.session_state["transcript_metadata"] = {k: v for k, v in result.items() if k != "transcript"}
-                session.audit.append("transcription", clause_id=c["id"], transcript=result["transcript"], metadata=st.session_state["transcript_metadata"])
-            except Exception as exc:
-                st.error(f"Transcription failed ({type(exc).__name__}). No answer was accepted.")
-                session.audit.append("transcription_failed", error_type=type(exc).__name__)
-        typed = st.checkbox("Use typed synthetic answer instead of voice")
-        if typed:
-            answer = st.text_area("Typed teach-back", key=f"typed_{session.index}_{session.attempt}")
-        else:
-            answer = st.session_state.get("transcript", "")
-            st.write("Prisma heard: " + (answer or "No transcript yet"))
-        if st.button("Assess teach-back", type="primary", disabled=not answer.strip()):
-            try:
-                with st.spinner("Assessing against rubric…"):
-                    evidence = score(answer, c)
-                session.submit(answer, evidence, source="typed" if typed else "prisma",
-                               transcript_metadata=None if typed else st.session_state.get("transcript_metadata"))
-                st.session_state.pop("transcript", None)
-                st.session_state.pop("transcript_metadata", None)
+        conversation = st.session_state.conversation
+        turn = conversation.turn
+        st.caption("Tap the mic to start and stop your answer. Use a fictional customer response; no personal information.")
+        recording = st.audio_input("Your answer", sample_rate=16000, key=f"recording_{turn}")
+        if recording is not None:
+            with st.spinner("Listening with Prisma and checking your understanding…"):
+                changed = conversation.receive(recording.getvalue(), transcribe, score)
+            if changed:
                 st.rerun()
-            except Exception as exc:
-                session.audit.append("assessment_failed", clause_id=c["id"], error_type=type(exc).__name__)
-                st.error(f"Assessment failed ({type(exc).__name__}). No pass was recorded. Retry or refer to a human.")
+        if conversation.error:
+            st.error(f"Could not complete {conversation.error['stage']} ({conversation.error['type']}). No pass was recorded. Record again, retry, or refer to a human.")
+            if recording is not None and st.button("Retry this answer"):
+                with st.spinner("Retrying…"):
+                    changed = conversation.receive(recording.getvalue(), transcribe, score, retry=True)
+                if changed:
+                    st.rerun()
+        if conversation.history:
+            last = conversation.history[-1]
+            st.write("You said: " + last["answer"])
+            st.caption("Understanding: " + last["verdict"].replace("_", " "))
     if st.button("Stop and refer to a human"):
         session.status = "human_review"
         session.audit.append("session_finished", status="human_review", reason="manual_referral")
         st.rerun()
+
+if "conversation" in st.session_state:
+    conversation = st.session_state.conversation
+    with st.spinner("Nalini is preparing her response…"):
+        spoken = conversation.speak(synthesize)
+    if spoken is None:
+        st.error("Nalini's audio could not be generated. You can read the question above or retry the voice.")
+        if st.button("Retry Nalini's voice"):
+            conversation.speak(synthesize, retry=True)
+            st.rerun()
+    else:
+        # A fresh turn mounts a fresh player. Ordinary reruns retain the same audio.
+        st.audio(spoken, format="audio/wav", autoplay=True)
+        st.caption("Nalini · If playback is blocked by your browser, press play.")
 
 with st.expander("Audit trail / receipt", expanded=session.status != "active"):
     records = session.audit.records()

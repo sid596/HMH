@@ -5,3 +5,5 @@ __pycache__/
 data/*
 !data/.gitkeep
 .hmh-secrets.json
+.streamlit/secrets.toml
+app/.streamlit/secrets.toml
