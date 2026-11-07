@@ -107,7 +107,7 @@ class Session:
         self.audit.append("session_started", pack_version=pack["pack_version"], pack_hash=pack_hash(pack),
                           pack_snapshot=pack, mode=mode, disclosure=pack["disclosure"],
                           scorer_model=os.getenv("SCORER_MODEL") if mode == "live" else "scripted_fixture",
-                          scorer_prompt_version="teachback-1", policy_version="policy-1")
+                          scorer_prompt_version="teachback-2-multilingual", policy_version="policy-1")
         self.prompt()
 
     @property

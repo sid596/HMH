@@ -1,0 +1,89 @@
+{
+  "pack_version": "fictional-savings-1.1-hi-en-draft",
+  "product": "Udaan Demo Savings Plan",
+  "synthetic": true,
+  "approval": {
+    "status": "draft",
+    "reviewer": null,
+    "reviewed_at": null
+  },
+  "disclosure": "This is a simulated verification call for a fictional product. An automated check helps us see whether we explained the terms clearly. It cannot prove understanding or provide legal consent certification.",
+  "clauses": [
+    {
+      "id": "contribution",
+      "title": "Monthly payment",
+      "critical": true,
+      "explain": "Is fictional plan mein har mahine 1,000 rupaye dene hain, 3 saal tak. This is a monthly payment, not a one-time payment.",
+      "question": "Let me check whether I explained that clearly: aapko kitna aur kitni baar pay karna hoga, aur kab tak?",
+      "fallback_explain": "Har month 1,000 rupaye. Aise 36 months, yaani 3 years. Sirf ek baar 1,000 dena enough nahi hai.",
+      "must_have_facts": [
+        "Pay 1,000 rupees each month",
+        "Payments continue for 3 years"
+      ],
+      "misconceptions": [
+        "Only one payment of 1,000 rupees is required",
+        "Payments stop before 3 years"
+      ]
+    },
+    {
+      "id": "early_exit",
+      "title": "Early withdrawal",
+      "critical": true,
+      "explain": "Paise 3 saal ke liye locked hain. Agar usse pehle withdraw karte hain, withdrawal amount ka 5 percent penalty lagega.",
+      "question": "Agar second year mein paise nikaalne pade, toh kya hoga? Lock-in kitne saal ka hai?",
+      "fallback_explain": "3 years se pehle paise nikaaloge toh charge lagega: jitna nikaaloge uska 5 percent. For example, 10,000 rupaye withdraw karne par 500 rupaye penalty.",
+      "must_have_facts": [
+        "The lock-in lasts 3 years",
+        "Withdrawal before 3 years incurs a 5 percent penalty on the withdrawal amount"
+      ],
+      "misconceptions": [
+        "Early withdrawal is free",
+        "Penalty applies only after 3 years",
+        "Early withdrawal penalty is a fixed 500 rupees for every amount"
+      ]
+    },
+    {
+      "id": "returns",
+      "title": "Returns are uncertain",
+      "critical": true,
+      "explain": "Is fictional plan ka return guaranteed nahi hai. Value market ke saath badal sakti hai, aur loss bhi ho sakta hai.",
+      "question": "Agar market neeche jaaye, toh kya aapka profit fixed rahega? Apne words mein batayein.",
+      "fallback_explain": "Fixed profit ka promise nahi hai. Market girne par investment ki value kam ho sakti hai; loss possible hai.",
+      "must_have_facts": [
+        "Returns are not guaranteed",
+        "Investment value can fall and a loss is possible"
+      ],
+      "misconceptions": [
+        "Profit is fixed or guaranteed",
+        "There is no possibility of losing money"
+      ]
+    },
+    {
+      "id": "cancellation",
+      "title": "Cancellation window",
+      "critical": true,
+      "explain": "Yeh invented demo rule hai: documents milne ke 15 din ke andar cancellation request kar sakte hain. Refund se pehle 100 rupaye ka fixed demo processing charge katega.",
+      "question": "Documents milne ke 10 din baad cancel karna ho, toh kya kar sakte hain aur kya charge hoga? Deadline bhi batayein.",
+      "fallback_explain": "Documents receive karne se 15 days tak cancel kar sakte hain. Refund mein 100 rupees processing charge deduct hoga. Yeh sirf demo product ka invented rule hai.",
+      "must_have_facts": [
+        "Can request cancellation within 15 days of receiving documents",
+        "A fixed 100 rupee processing charge is deducted from the refund"
+      ],
+      "misconceptions": [
+        "Cancellation is always free",
+        "The cancellation window starts from some event other than receiving documents",
+        "Can cancel at any time under this window"
+      ]
+    }
+  ],
+  "language": "hi-en",
+  "translation_review": "pending_native_speaker_review",
+  "messages": {
+    "understood": "Thank you, aapne yeh point explain kar diya. Ab agla point.",
+    "partial": "Aapne kuch points explain kiye. Baaki details phir se clear karte hain.",
+    "misunderstood": "Shayad explanation clear nahi thi. Terms phir se samajhte hain.",
+    "no_evidence": "Sirf haan se understanding ka pata nahi chalta. Please apne words mein batayein.",
+    "human_review": "Yeh verification yahin stop kar rahe hain. A team member needs to review this with you. Consent accept nahi hua hai.",
+    "complete": "Thank you. Aapne saare demo teach-back checks complete kar liye hain. Yeh fictional demo hai, legal consent certificate nahi."
+  }
+}

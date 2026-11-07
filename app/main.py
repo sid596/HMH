@@ -6,6 +6,7 @@ import os
 import streamlit as st
 from engine.core import Session, load_pack
 from engine.conversation import Conversation
+from engine.localization import PROFILES, localized_pack
 from engine.scorer import score, fixture_evidence
 from voice.gnani import transcribe, synthesize
 
@@ -17,16 +18,19 @@ if secrets_path.exists():
             os.environ.setdefault(key, value)
 st.set_page_config(page_title="Haan Matlab Haan", page_icon="🗣️", layout="wide")
 st.title("Haan Matlab Haan")
-st.caption("Teach-back verification • Synthetic product and customer scenarios • Hindi–English prototype")
+st.caption("Teach-back verification • Synthetic product and customer scenarios • English, Hindi, Hinglish, Marathi and Kannada")
 st.write("A recorded yes is only the beginning. Ask customers to explain key terms in their own words, then route unresolved confusion to a person.")
-pack = load_pack(ROOT / "packs/fictional_savings_v1.json")
 with st.sidebar:
     st.header("Session setup")
     mode = st.selectbox("Assessment mode", ["Voice conversation", "Scripted walkthrough"], disabled="session" in st.session_state)
     st.caption("Scripted mode uses predefined answers and evidence; it does not evaluate speech or arbitrary text.")
     language = st.selectbox("Prisma language hint", ["hi-IN", "en-IN", "mr-IN", "kn-IN", "indic-auto"], disabled="session" in st.session_state)
-    tts_language = st.selectbox("Speaking language", ["hi-IN", "hi-en", "en-IN", "mr-IN", "kn-IN"], disabled="session" in st.session_state)
-    voice = st.text_input("Timbre voice", "Nalini", help="Timbre v2.5: Hindi Nalini, Hinglish Poorvi, English Pranav, Marathi Ishaan, Kannada Kavin.", disabled="session" in st.session_state)
+    tts_language = st.selectbox("Speaking language", list(PROFILES), format_func=lambda code: PROFILES[code]["label"], disabled="session" in st.session_state)
+    profile = PROFILES[tts_language]
+    voice = profile["voice"]
+    pack = localized_pack(tts_language)
+    st.caption(f"Voice: {voice} · {profile['persona']} · Timbre v2.5")
+    st.caption("Speaking language selects the matching script and voice. Listening language controls how your answer is transcribed; it does not translate the script.")
     st.write("Gnani key: " + ("configured" if os.getenv("GNANI_API_KEY") else "missing"))
     st.write("Semantic scorer: " + ("configured" if os.getenv("SCORER_API_KEY") and os.getenv("SCORER_MODEL") else "missing"))
     if st.button("Reset session"):
@@ -37,12 +41,12 @@ with st.sidebar:
         st.json(pack)
         st.write("Confidence gate: 0.85 (provisional, uncalibrated). Two retries. Low confidence or exhausted retries → human review.")
 
-st.warning("Draft rubric: human review pending. All amounts and terms are invented. This demo cannot certify legal consent or prove understanding.")
+st.warning("Draft rubric and translations: native-speaker review pending. All amounts and terms are invented. This demo cannot certify legal consent or prove understanding.")
 if "session" not in st.session_state:
     st.info(pack["disclosure"])
     ready = all(os.getenv(k) for k in ("GNANI_API_KEY", "SCORER_API_KEY", "SCORER_MODEL"))
     if mode == "Voice conversation":
-        st.write("Nalini asks aloud. Tap the microphone, answer in your own words, then stop recording. Assessment and the next spoken response happen automatically.")
+        st.write(f"{voice} asks aloud. Tap the microphone, answer in your own words, then stop recording. Assessment and the next spoken response happen automatically.")
         st.caption("Allow microphone access. If your browser blocks automatic playback, press play on the audio player. Keep each synthetic answer under 30 seconds.")
         if not ready:
             st.info("Configure GNANI_API_KEY, SCORER_API_KEY and SCORER_MODEL in Streamlit Secrets to start voice conversation.")
@@ -58,6 +62,7 @@ if "session" not in st.session_state:
     st.stop()
 
 session = st.session_state.session
+pack = session.pack
 st.progress(len(session.results) / len(pack["clauses"]))
 st.caption(f"Session {session.audit.session_id} · Rubric {pack['pack_version']}")
 if session.status != "active":
@@ -107,17 +112,17 @@ else:
 
 if "conversation" in st.session_state:
     conversation = st.session_state.conversation
-    with st.spinner("Nalini is preparing her response…"):
+    with st.spinner(f"{conversation.voice} is preparing a response…"):
         spoken = conversation.speak(synthesize)
     if spoken is None:
-        st.error("Nalini's audio could not be generated. You can read the question above or retry the voice.")
-        if st.button("Retry Nalini's voice"):
+        st.error("Voice audio could not be generated. You can read the question above or retry the voice.")
+        if st.button("Retry voice playback"):
             conversation.speak(synthesize, retry=True)
             st.rerun()
     else:
         # A fresh turn mounts a fresh player. Ordinary reruns retain the same audio.
         st.audio(spoken, format="audio/wav", autoplay=True)
-        st.caption("Nalini · If playback is blocked by your browser, press play.")
+        st.caption(f"{conversation.voice} · If playback is blocked by your browser, press play.")
 
 with st.expander("Audit trail / receipt", expanded=session.status != "active"):
     records = session.audit.records()

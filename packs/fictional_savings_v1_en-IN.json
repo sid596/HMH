@@ -1,0 +1,89 @@
+{
+  "pack_version": "fictional-savings-1.1-en-IN-draft",
+  "product": "Udaan Demo Savings Plan",
+  "synthetic": true,
+  "approval": {
+    "status": "draft",
+    "reviewer": null,
+    "reviewed_at": null
+  },
+  "disclosure": "This is a simulated verification call for a fictional product. An automated check helps us see whether we explained the terms clearly. It cannot prove understanding or certify legal consent.",
+  "clauses": [
+    {
+      "id": "contribution",
+      "title": "Monthly payment",
+      "critical": true,
+      "explain": "In this fictional plan, you pay 1,000 rupees every month for 3 years. This is not a one-time payment.",
+      "question": "To check whether I explained clearly: how much must you pay, how often, and for how long?",
+      "fallback_explain": "You pay 1,000 rupees each month for 36 months, which is 3 years. Paying 1,000 rupees just once is not enough.",
+      "must_have_facts": [
+        "Pay 1,000 rupees each month",
+        "Payments continue for 3 years"
+      ],
+      "misconceptions": [
+        "Only one payment of 1,000 rupees is required",
+        "Payments stop before 3 years"
+      ]
+    },
+    {
+      "id": "early_exit",
+      "title": "Early withdrawal",
+      "critical": true,
+      "explain": "The lock-in lasts 3 years. If you withdraw before then, a penalty of 5 percent of the withdrawal amount applies.",
+      "question": "What happens if you need to withdraw in the second year? How long is the lock-in?",
+      "fallback_explain": "Withdrawing before 3 years costs 5 percent of the amount withdrawn. For example, withdrawing 10,000 rupees costs a 500 rupee penalty.",
+      "must_have_facts": [
+        "The lock-in lasts 3 years",
+        "Withdrawal before 3 years incurs a 5 percent penalty on the withdrawal amount"
+      ],
+      "misconceptions": [
+        "Early withdrawal is free",
+        "Penalty applies only after 3 years",
+        "The penalty is always a fixed 500 rupees regardless of the amount"
+      ]
+    },
+    {
+      "id": "returns",
+      "title": "Returns are uncertain",
+      "critical": true,
+      "explain": "Returns on this fictional plan are not guaranteed. The value changes with the market and you can lose money.",
+      "question": "If the market falls, is your profit fixed? Please explain in your own words.",
+      "fallback_explain": "There is no promise of a fixed profit. If the market falls, your investment value can fall and you can suffer a loss.",
+      "must_have_facts": [
+        "Returns are not guaranteed",
+        "Investment value can fall and a loss is possible"
+      ],
+      "misconceptions": [
+        "Profit is fixed or guaranteed",
+        "There is no possibility of losing money"
+      ]
+    },
+    {
+      "id": "cancellation",
+      "title": "Cancellation window",
+      "critical": true,
+      "explain": "This is an invented demo rule: you can request cancellation within 15 days of receiving the documents. A fixed 100 rupee processing charge is deducted from the refund.",
+      "question": "If you want to cancel 10 days after receiving the documents, what can you do and what is the charge? Please also state the deadline.",
+      "fallback_explain": "You can request cancellation within 15 days after receiving the documents. A fixed 100 rupee processing charge is deducted from your refund. This is only an invented demo rule.",
+      "must_have_facts": [
+        "Can request cancellation within 15 days of receiving documents",
+        "A fixed 100 rupee processing charge is deducted from the refund"
+      ],
+      "misconceptions": [
+        "Cancellation is always free",
+        "The cancellation window starts from an event other than receiving documents",
+        "This cancellation window allows cancellation at any time"
+      ]
+    }
+  ],
+  "language": "en-IN",
+  "messages": {
+    "understood": "Thank you, you explained that point. Let us move to the next one.",
+    "partial": "You explained some of the points. Let me clarify the remaining details.",
+    "misunderstood": "My explanation may not have been clear. Let me explain the terms again.",
+    "no_evidence": "Saying yes alone does not show me what you understood. Please explain in your own words.",
+    "human_review": "I am stopping this verification. A team member needs to review this with you. Consent has not been accepted.",
+    "complete": "Thank you. You completed all the demo teach-back checks. This fictional demonstration is not a legal consent certificate."
+  },
+  "translation_review": "pending_native_speaker_review"
+}

@@ -1,6 +1,6 @@
 # Haan Matlab Haan
 
-A local Hindi–English teach-back verification prototype for a fictional savings product. Intended buyer: a lender/insurer's compliance or risk team running post-sale verification. It records evidence of what a customer could explain and routes unresolved confusion to human review. It cannot prove understanding or certify legal consent.
+A local multilingual teach-back verification prototype for a fictional savings product. Intended buyer: a lender/insurer's compliance or risk team running post-sale verification. It records evidence of what a customer could explain and routes unresolved confusion to human review. It cannot prove understanding or certify legal consent.
 
 ## Run
 
@@ -13,7 +13,7 @@ python -m pip install -r requirements.txt
 streamlit run app/main.py
 ```
 
-Voice conversation is the default. Click **Start conversation**, listen to Nalini, tap the microphone to record, and stop when finished. Prisma transcription, rubric assessment, and Nalini's next response run automatically. Recordings longer than 30 seconds are rejected locally. Separate listening and speaking language settings allow auto-detection for Prisma while Timbre uses a supported voice/language pair. Browser autoplay policies may require pressing play once.
+Voice conversation is the default. Click **Start conversation**, listen to the selected voice, tap the microphone to record, and stop when finished. Prisma transcription, rubric assessment, and the next spoken response run automatically. Recordings longer than 30 seconds are rejected locally. Separate listening and speaking language settings allow auto-detection for Prisma while Timbre uses a supported voice/language pair. Browser autoplay policies may require pressing play once.
 
 Scripted walkthrough is available in the sidebar and works without keys. It exercises the flow with predefined evidence and is explicitly not a semantic assessment. Choose the nodding persona to see retries and escalation; attentive passes all demo checks.
 
@@ -70,3 +70,19 @@ SCORER_BASE_URL = "https://api.openai.com/v1"
 ```
 
 Restart after configuration. The voice Start button stays disabled until all required values are present. Tests mock speech/scorer calls; browser microphone, autoplay, real API access and semantic accuracy still require a live check.
+
+## Language packs and automatic voices
+
+Speaking language loads a complete saved rubric from `packs/fictional_savings_v1_<language>.json`, including explanations, questions, simpler fallbacks, required facts, misconceptions, disclosure, feedback and endings. The same localized rubric is passed to the scorer and saved in the audit snapshot. Pack versions include the language. No live translation request is made.
+
+| Language | Timbre v2.5 voice | Selection rationale |
+|---|---|---|
+| Hindi | Yashvi | Warm, empathetic |
+| Hinglish | Poorvi | Conversational bilingual voice |
+| English | Pranav | Friendly |
+| Marathi | Ishaan | Professional, clear instructions |
+| Kannada | Kavin | Professional, articulate |
+
+Routing follows the [Gnani voice catalog](https://docs.gnani.ai/api/TTS/available-voices), checked November 7, 2026. These are catalog-based defaults, not a listening evaluation of the voices. Each translation is a draft pending native-speaker review of meaning, naturalness and spoken numbers. Hindi, Marathi and Kannada scripts use their native writing systems. Hinglish intentionally mixes Hindi and English. The original pack remains available for older tests and evaluations.
+
+Listening language is independent: it tells Prisma how to transcribe the customer's answer. It does not translate prompts. Reset a session to change speaking language; active sessions keep their selected pack and voice. To test Kannada, reset, select Kannada as speaking language, then choose Kannada or auto-detect for listening.

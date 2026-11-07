@@ -23,3 +23,11 @@ class AppTests(unittest.TestCase):
             next(b for b in app.button if b.label == "Run scripted assessment").click().run()
         self.assertEqual(len(app.exception), 0)
         self.assertIn("Human review required", app.error[0].value)
+
+    def test_kannada_selection_changes_disclosure_and_voice(self):
+        from engine.localization import localized_pack
+        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app/main.py")).run()
+        next(s for s in app.selectbox if s.label == "Speaking language").select("kn-IN").run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertTrue(any("Kavin" in c.value for c in app.caption))
+        self.assertTrue(any(i.value == localized_pack("kn-IN")["disclosure"] for i in app.info))

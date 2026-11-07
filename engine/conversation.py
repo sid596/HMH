@@ -14,7 +14,11 @@ def validate_recording(audio):
 
 class Conversation:
     def __init__(self, pack, directory, stt_language="hi-IN", tts_language="hi-IN", voice="Nalini"):
+        if pack.get("language") and pack["language"] != tts_language:
+            raise ValueError("Speaking language must match rubric language")
         self.session = Session(pack, directory, "live")
+        self.session.audit.append("voice_configuration", speaking_language=tts_language,
+                                  listening_language=stt_language, voice=voice, model="timbre-v2.5")
         self.stt_language, self.tts_language, self.voice = stt_language, tts_language, voice
         self.completed = set()
         self.transcripts = {}
@@ -33,9 +37,9 @@ class Conversation:
     def speech_text(self):
         s = self.session
         if s.status == "human_review":
-            return "Main yeh verification yahin rok rahi hoon. A team member needs to review this with you. Consent accept nahi hua hai."
+            return s.pack.get("messages", {}).get("human_review", "Main yeh verification yahin rok rahi hoon. A team member needs to review this with you. Consent accept nahi hua hai.")
         if s.status != "active":
-            return "Thank you. Aapne saare demo teach-back checks complete kar liye hain. Yeh fictional demo hai, legal consent certificate nahi."
+            return s.pack.get("messages", {}).get("complete", "Thank you. Aapne saare demo teach-back checks complete kar liye hain. Yeh fictional demo hai, legal consent certificate nahi.")
         c = s.clause
         explanation = c["fallback_explain"] if s.attempt >= 2 else c["explain"]
         disclosure = s.pack["disclosure"] if s.index == 0 and s.attempt == 0 else ""
@@ -87,12 +91,12 @@ class Conversation:
             self.failed.discard(token)
             self.error = None
             self.history.append({"answer": answer, "verdict": evidence.verdict, "action": action})
-            self.feedback = {
+            self.feedback = self.session.pack.get("messages", {
                 "understood": "Thank you, aapne yeh point explain kar diya. Ab agla point.",
                 "partial": "Aapne kuch points explain kiye. Main baaki baat phir se clear karti hoon.",
                 "misunderstood": "Shayad meri explanation clear nahi thi. Main terms phir se explain karti hoon.",
                 "no_evidence": "Sirf haan se mujhe understanding check karne mein madad nahi milti. Please apne words mein batayein."
-            }[evidence.verdict]
+            })[evidence.verdict]
             return True
         except Exception as exc:
             self.failed.add(token)
