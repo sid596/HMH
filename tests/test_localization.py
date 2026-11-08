@@ -31,7 +31,7 @@ class LocalizationTests(unittest.TestCase):
                 self.assertIn(pack["clauses"][0]["question"], text)
                 self.assertEqual(tts.call_args.kwargs, {"language": language, "voice": profile["voice"]})
                 for verdict in ("partial", "misunderstood", "no_evidence"):
-                    c.feedback = pack["messages"][verdict]
+                    c.history = [{"verdict": verdict}]
                     c.session.attempt = 2
                     self.assertIn(pack["messages"][verdict], c.speech_text())
                     self.assertIn(pack["clauses"][0]["fallback_explain"], c.speech_text())
@@ -53,3 +53,38 @@ class LocalizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(ValueError):
                 Conversation(localized_pack("kn-IN"), d, tts_language="hi-IN")
+
+    def test_auto_input_cannot_change_marathi_feedback_after_actual_assessment(self):
+        import io
+        import wave
+        from engine.scorer import fixture_evidence
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes(b"\0\0" * 16000)
+        pack = localized_pack("mr-IN")
+        with tempfile.TemporaryDirectory() as d:
+            c = Conversation(pack, d, "indic-auto", "mr-IN", "Ishaan")
+            stt = Mock(return_value={"transcript": "गलत उत्तर", "detected_language_code": "hi-IN"})
+            scorer = Mock(return_value=fixture_evidence(c.session.clause, "misconception")[1])
+            self.assertTrue(c.receive(buffer.getvalue(), stt, scorer))
+            c.feedback = "Shayad meri explanation clear nahi thi."
+            tts = Mock(return_value=b"RIFF_test")
+            c.speak(tts)
+            text = tts.call_args.args[0]
+            self.assertTrue(text.startswith(pack["messages"]["misunderstood"]))
+            self.assertIn(pack["clauses"][0]["explain"], text)
+            self.assertNotIn("Shayad", text)
+            self.assertEqual(tts.call_args.kwargs["language"], "mr-IN")
+            self.assertEqual(tts.call_args.kwargs["voice"], "Ishaan")
+
+    def test_legacy_messages_resolve_in_selected_speaking_language(self):
+        pack = localized_pack("mr-IN")
+        del pack["messages"]
+        with tempfile.TemporaryDirectory() as d:
+            c = Conversation(pack, d, "indic-auto", "mr-IN", "Ishaan")
+            c.history = [{"verdict": "misunderstood"}]
+            c.session.attempt = 1
+            self.assertTrue(c.speech_text().startswith(localized_pack("mr-IN")["messages"]["misunderstood"]))

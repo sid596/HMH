@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 from engine.conversation import Conversation
 from engine.core import load_pack
+from engine.localization import localized_pack
 from engine.scorer import fixture_evidence
 
 PACK = load_pack(Path(__file__).resolve().parents[1] / "packs/fictional_savings_v1.json")
@@ -27,12 +28,12 @@ class ConversationTests(unittest.TestCase):
             scorer = Mock(return_value=fixture_evidence(c.session.clause, "nods_along")[1])
             self.assertTrue(c.receive(recording(), stt, scorer))
             self.assertEqual(c.session.attempt, 1)
-            self.assertIn("Sirf haan", c.speech_text())
+            self.assertIn(localized_pack("hi-IN")["messages"]["no_evidence"], c.speech_text())
             for _ in PACK["clauses"]:
                 scorer.return_value = fixture_evidence(c.session.clause, "attentive")[1]
                 self.assertTrue(c.receive(recording(), stt, scorer))
             self.assertEqual(c.session.status, "demo_checks_passed")
-            self.assertIn("Thank you", c.speech_text())
+            self.assertEqual(localized_pack("hi-IN")["messages"]["complete"], c.speech_text())
             self.assertFalse(c.receive(recording(), stt, scorer))
 
     def test_scorer_failure_reuses_transcript_only_on_explicit_retry(self):

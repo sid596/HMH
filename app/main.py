@@ -123,6 +123,9 @@ if "conversation" in st.session_state:
         # A fresh turn mounts a fresh player. Ordinary reruns retain the same audio.
         st.audio(spoken, format="audio/wav", autoplay=True)
         st.caption(f"{conversation.voice} · If playback is blocked by your browser, press play.")
+        with st.expander("Exact text sent to the voice"):
+            st.write(conversation.speech_text())
+            st.caption(f"Speaking language: {conversation.tts_language} · Pack: {conversation.session.pack['pack_version']}")
 
 with st.expander("Audit trail / receipt", expanded=session.status != "active"):
     records = session.audit.records()

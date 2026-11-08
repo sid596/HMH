@@ -3,6 +3,7 @@ import hashlib
 import io
 import wave
 from engine.core import Session
+from engine.localization import localized_pack
 
 
 def validate_recording(audio):
@@ -32,18 +33,28 @@ class Conversation:
     @property
     def turn(self):
         s = self.session
-        return f"{s.index}:{s.attempt}:{s.status}"
+        return f"localized-feedback-2:{s.index}:{s.attempt}:{s.status}"
+
+    def messages(self):
+        # Older session snapshots may predate translated messages. Resolve those
+        # from the selected output language, never from the detected input language.
+        if self.session.pack.get("language") not in (None, self.tts_language):
+            raise ValueError("Speaking language must match rubric language")
+        return self.session.pack.get("messages") or localized_pack(self.tts_language)["messages"]
 
     def speech_text(self):
         s = self.session
         if s.status == "human_review":
-            return s.pack.get("messages", {}).get("human_review", "Main yeh verification yahin rok rahi hoon. A team member needs to review this with you. Consent accept nahi hua hai.")
+            return self.messages()["human_review"]
         if s.status != "active":
-            return s.pack.get("messages", {}).get("complete", "Thank you. Aapne saare demo teach-back checks complete kar liye hain. Yeh fictional demo hai, legal consent certificate nahi.")
+            return self.messages()["complete"]
         c = s.clause
         explanation = c["fallback_explain"] if s.attempt >= 2 else c["explain"]
         disclosure = s.pack["disclosure"] if s.index == 0 and s.attempt == 0 else ""
-        return " ".join(x for x in [disclosure, self.feedback, explanation, c["question"]] if x)
+        # Derive the acknowledgement from the verdict on every turn. Do not reuse
+        # a cached feedback string that may come from an older language/session.
+        feedback = self.messages()[self.history[-1]["verdict"]] if self.history else ""
+        return " ".join(x for x in [disclosure, feedback, explanation, c["question"]] if x)
 
     def speak(self, synthesizer, retry=False):
         turn = self.turn
@@ -91,12 +102,6 @@ class Conversation:
             self.failed.discard(token)
             self.error = None
             self.history.append({"answer": answer, "verdict": evidence.verdict, "action": action})
-            self.feedback = self.session.pack.get("messages", {
-                "understood": "Thank you, aapne yeh point explain kar diya. Ab agla point.",
-                "partial": "Aapne kuch points explain kiye. Main baaki baat phir se clear karti hoon.",
-                "misunderstood": "Shayad meri explanation clear nahi thi. Main terms phir se explain karti hoon.",
-                "no_evidence": "Sirf haan se mujhe understanding check karne mein madad nahi milti. Please apne words mein batayein."
-            })[evidence.verdict]
             return True
         except Exception as exc:
             self.failed.add(token)
