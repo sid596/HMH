@@ -9,6 +9,7 @@ from engine.conversation import Conversation
 from engine.localization import PROFILES, localized_pack
 from engine.scorer import score, fixture_evidence
 from voice.gnani import transcribe, synthesize
+from app.builder import render_builder
 
 ROOT = Path(__file__).resolve().parents[1]
 secrets_path = ROOT / ".hmh-secrets.json"
@@ -17,7 +18,13 @@ if secrets_path.exists():
         if key in {"GNANI_API_KEY", "SCORER_API_KEY", "SCORER_MODEL", "SCORER_BASE_URL"}:
             os.environ.setdefault(key, value)
 st.set_page_config(page_title="Haan Matlab Haan", page_icon="🗣️", layout="wide")
-st.title("Haan Matlab Haan")
+st.markdown("**HAAN MATLAB HAAN**  /  Make understanding visible")
+workspace = st.radio("Workspace", ["Build a verification pack", "Voice verification"],
+                     horizontal=True, key="workspace", label_visibility="collapsed")
+if workspace == "Build a verification pack":
+    render_builder(ROOT)
+    st.stop()
+st.title("Voice verification")
 st.caption("Teach-back verification • Synthetic product and customer scenarios • English, Hindi, Hinglish, Marathi and Kannada")
 st.write("A recorded yes is only the beginning. Ask customers to explain key terms in their own words, then route unresolved confusion to a person.")
 with st.sidebar:
@@ -25,17 +32,26 @@ with st.sidebar:
     mode = st.selectbox("Assessment mode", ["Voice conversation", "Scripted walkthrough"], disabled="session" in st.session_state)
     st.caption("Scripted mode uses predefined answers and evidence; it does not evaluate speech or arbitrary text.")
     language = st.selectbox("Prisma language hint", ["hi-IN", "en-IN", "mr-IN", "kn-IN", "indic-auto"], disabled="session" in st.session_state)
-    tts_language = st.selectbox("Speaking language", list(PROFILES), format_func=lambda code: PROFILES[code]["label"], disabled="session" in st.session_state)
+    tts_language = st.selectbox("Speaking language", list(PROFILES), format_func=lambda code: PROFILES[code]["label"], key="speaking_language", disabled="session" in st.session_state)
     profile = PROFILES[tts_language]
     voice = profile["voice"]
     pack = localized_pack(tts_language)
+    saved = st.session_state.get("compiled_pack")
+    if saved:
+        choice = st.selectbox("Verification pack", ["Example product", "My reviewed demo pack"], key="pack_choice", disabled="session" in st.session_state)
+        if choice == "My reviewed demo pack":
+            pack = saved
+            if saved["language"] != tts_language:
+                st.info("Select " + PROFILES[saved["language"]]["label"] + " as the speaking language to use this pack.")
+    else:
+        st.caption("Using the example product. Build a reviewed pack in the other workspace.")
     st.caption(f"Voice: {voice} · {profile['persona']} · Timbre v2.5")
     st.caption("Speaking language selects the matching script and voice. Listening language controls how your answer is transcribed; it does not translate the script.")
     st.write("Gnani key: " + ("configured" if os.getenv("GNANI_API_KEY") else "missing"))
     st.write("Semantic scorer: " + ("configured" if os.getenv("SCORER_API_KEY") and os.getenv("SCORER_MODEL") else "missing"))
     if st.button("Reset session"):
-        for key in list(st.session_state):
-            del st.session_state[key]
+        for key in ("session", "conversation"):
+            st.session_state.pop(key, None)
         st.rerun()
     with st.expander("Rubric and policy"):
         st.json(pack)
@@ -44,6 +60,7 @@ with st.sidebar:
 st.warning("Draft rubric and translations: native-speaker review pending. All amounts and terms are invented. This demo cannot certify legal consent or prove understanding.")
 if "session" not in st.session_state:
     st.info(pack["disclosure"])
+    pack_matches = pack.get("language") == tts_language
     ready = all(os.getenv(k) for k in ("GNANI_API_KEY", "SCORER_API_KEY", "SCORER_MODEL"))
     if mode == "Voice conversation":
         st.write(f"{voice} asks aloud. Tap the microphone, answer in your own words, then stop recording. Assessment and the next spoken response happen automatically.")
@@ -51,7 +68,7 @@ if "session" not in st.session_state:
         if not ready:
             st.info("Configure GNANI_API_KEY, SCORER_API_KEY and SCORER_MODEL in Streamlit Secrets to start voice conversation.")
     label = "Start conversation" if mode == "Voice conversation" else "Start disclosed demo session"
-    if st.button(label, type="primary", disabled=mode == "Voice conversation" and not ready):
+    if st.button(label, type="primary", disabled=not pack_matches or (mode == "Voice conversation" and not ready)):
         if mode == "Voice conversation":
             conversation = Conversation(pack, ROOT / "data", language, tts_language, voice)
             st.session_state.conversation = conversation

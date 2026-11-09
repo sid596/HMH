@@ -7,6 +7,7 @@ class AppTests(unittest.TestCase):
     def test_scripted_happy_path(self):
         app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app/main.py")).run()
         self.assertEqual(len(app.exception), 0)
+        next(r for r in app.radio if r.label == "Workspace").set_value("Voice verification").run()
         next(s for s in app.selectbox if s.label == "Assessment mode").select("Scripted walkthrough").run()
         next(b for b in app.button if b.label == "Start disclosed demo session").click().run()
         for _ in range(4):
@@ -17,6 +18,7 @@ class AppTests(unittest.TestCase):
 
     def test_scripted_nodding_stops(self):
         app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app/main.py")).run()
+        next(r for r in app.radio if r.label == "Workspace").set_value("Voice verification").run()
         next(s for s in app.selectbox if s.label == "Assessment mode").select("Scripted walkthrough").run()
         next(b for b in app.button if b.label == "Start disclosed demo session").click().run()
         for _ in range(3):
@@ -27,6 +29,7 @@ class AppTests(unittest.TestCase):
     def test_kannada_selection_changes_disclosure_and_voice(self):
         from engine.localization import localized_pack
         app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app/main.py")).run()
+        next(r for r in app.radio if r.label == "Workspace").set_value("Voice verification").run()
         next(s for s in app.selectbox if s.label == "Speaking language").select("kn-IN").run()
         self.assertEqual(len(app.exception), 0)
         self.assertTrue(any("Kavin" in c.value for c in app.caption))

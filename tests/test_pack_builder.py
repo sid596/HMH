@@ -1,0 +1,56 @@
+from copy import deepcopy
+import unittest
+from unittest.mock import Mock
+from engine.pack_builder import sample_catalog, compile_pack, generate_catalog, validate_topics, chunks
+
+class PackBuilderTests(unittest.TestCase):
+    def test_required_core_cannot_be_omitted(self):
+        catalog = sample_catalog("en-IN")
+        with self.assertRaisesRegex(ValueError, "Required"):
+            compile_pack(catalog, {"contribution"}, "Demo reviewer", {})
+
+    def test_exclusion_needs_reason_and_is_preserved(self):
+        catalog = sample_catalog("mr-IN")
+        selected = {"contribution", "returns", "early_exit"}
+        with self.assertRaisesRegex(ValueError, "reason"):
+            compile_pack(catalog, selected, "Demo reviewer", {})
+        pack = compile_pack(catalog, selected, "Demo reviewer", {"cancellation": "Reviewed separately in the demo"})
+        self.assertEqual(len(pack["clauses"]), 3)
+        self.assertEqual(pack["language"], "mr-IN")
+        self.assertEqual(pack["approval"]["status"], "draft")
+        self.assertEqual(pack["review_record"]["excluded_topics"][0]["id"], "cancellation")
+        self.assertEqual(len(pack["review_record"]["catalog_snapshot"]), 4)
+        self.assertTrue(all(c["critical"] for c in pack["clauses"]))
+
+    def test_unresolved_details_prevent_runnable_pack(self):
+        catalog = sample_catalog("en-IN")
+        catalog["unresolved"] = ["Customer-specific premium missing"]
+        with self.assertRaisesRegex(ValueError, "Resolve"):
+            compile_pack(catalog, {t["id"] for t in catalog["topics"]}, "Reviewer", {})
+
+    def test_fabricated_quote_rejected(self):
+        catalog = sample_catalog("en-IN")
+        topic = deepcopy(catalog["topics"][0])
+        topic["sources"][0]["quote"] = "This quote is not in the actual document at all."
+        with self.assertRaisesRegex(ValueError, "quote"):
+            validate_topics({"topics": [topic], "unresolved": []}, catalog["document"]["pages"])
+
+    def test_generator_does_not_assign_mandatory_status(self):
+        catalog = sample_catalog("en-IN")
+        caller = Mock(return_value={"topics": deepcopy(catalog["topics"]), "unresolved": []})
+        result = generate_catalog(catalog["document"], "en-IN", caller=caller)
+        self.assertEqual(len(result["topics"]), 4)
+        self.assertFalse(any(t["required"] for t in result["topics"]))
+        self.assertEqual(caller.call_count, 1)
+
+    def test_long_pages_are_not_silently_truncated(self):
+        doc = {"pages": [{"page":1, "text":"abc "*20000}, {"page":2,"text":"last page"}]}
+        batches = chunks(doc)
+        reconstructed = "".join(p["text"] for b in batches for p in b)
+        self.assertEqual(reconstructed, "".join(p["text"] for p in doc["pages"]))
+
+    def test_two_parts_on_same_page_validate_both(self):
+        catalog = sample_catalog("en-IN")
+        topic = catalog["topics"][0]
+        source = topic["sources"][0]
+        validate_topics({"topics":[topic], "unresolved":[]}, [{"page":1,"text":source["quote"]}, {"page":1,"text":"More text on that same page."}])

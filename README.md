@@ -86,3 +86,19 @@ Speaking language loads a complete saved rubric from `packs/fictional_savings_v1
 Routing follows the [Gnani voice catalog](https://docs.gnani.ai/api/TTS/available-voices), checked November 7, 2026. These are catalog-based defaults, not a listening evaluation of the voices. Each translation is a draft pending native-speaker review of meaning, naturalness and spoken numbers. Hindi, Marathi and Kannada scripts use their native writing systems. Hinglish intentionally mixes Hindi and English. The original pack remains available for older tests and evaluations.
 
 Listening language is independent: it tells Prisma how to transcribe the customer's answer. It does not translate prompts. Reset a session to change speaking language; active sessions keep their selected pack and voice. To test Kannada, reset, select Kannada as speaking language, then choose Kannada or auto-detect for listening.
+
+## PDF topic-review workspace
+
+The app opens on **Build a verification pack**. The example product is explicitly a prewritten fixture: four synthetic topics with two example required topics. Use `+` to add a topic, expand its source/rubric, search or filter the library, and record a reason for each omission. Enter a reviewer name, attest to reviewing the content, and save a demo pack. **Open voice verification** selects that pack and its matching language/voice. Resetting the call preserves your builder state.
+
+For PDF generation choose **Upload synthetic PDF**, choose the output language, upload a text PDF, confirm synthetic data, then click **Generate topic library**. Text is sent to the configured semantic-model provider using the same SCORER settings. The UI displays the number of chunk requests before generation. There are no automatic retries. No Gnani credits are used for document generation.
+
+- Limits: 20 MB, 300 pages, 1.5 million extracted characters. OCR is not included; unreadable pages block generation rather than being silently omitted.
+- Each generated topic needs a verbatim quote and physical PDF page number. Code checks quote presence, not whether the model's interpretation is correct. Topics remain machine drafts pending review.
+- All text chunks are processed; extraction is not guaranteed exhaustive. Exact duplicate topic/source combinations are removed, but a human must review overlap across chunks.
+- Unresolved model-reported details prevent creating a runnable pack. Export the library to review those issues and supply a corrected/complete synthetic source before regenerating.
+- Required core topics are configured only for the built-in example. Uploaded PDFs have model-suggested risk labels, not an organisation-approved core. The generator cannot declare a topic mandatory.
+- Review identity is self-attested. No reviewer roles/authentication are enforced. Exported packs stay `draft` and never certify legal consent.
+- Saved packs include selected clauses, the full topic catalog, exclusion reasons, source document hash, model/prompt version, reviewer and timestamp. The session's audit log includes the pack snapshot. Storage in `data/packs/` and browser session state is local/ephemeral on cloud restarts; download packs and libraries to retain them. This prototype does not reload saved packs after a server restart.
+
+Run `python -m unittest discover -s tests -v` for policy, language, quote validation, selection and UI workflow tests. Live PDF-to-topic model quality and actual voice pronunciation require human evaluation; tests do not measure either.
