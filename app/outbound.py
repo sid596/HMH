@@ -3,6 +3,27 @@ import os
 import uuid
 import httpx
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
+from urllib.parse import urlsplit
+
+
+def call_setting(name):
+    """Read current Streamlit secrets before process environment defaults."""
+    try:
+        value = st.secrets.get(name, os.getenv(name, ""))
+    except (StreamlitSecretNotFoundError, FileNotFoundError):
+        value = os.getenv(name, "")
+    return str(value).strip()
+
+
+def health_error(status_code):
+    if status_code == 401:
+        return "Backend rejected the call token (HTTP 401). The Streamlit HMH_CALL_API_TOKEN must match the running backend's token."
+    if status_code == 404:
+        return "Backend health endpoint returned HTTP 404. The tunnel may be offline or HMH_CALL_API_URL points to the wrong service."
+    if status_code in (502, 503, 504):
+        return f"Tunnel/backend unavailable (HTTP {status_code}). Check that the call server is listening on the port forwarded by ngrok."
+    return f"Backend health request returned HTTP {status_code}. Check the tunnel and backend logs; this is not necessarily a token error."
 
 
 def render_outbound(pack):
@@ -11,8 +32,11 @@ def render_outbound(pack):
         st.info("Twilio trial currently blocks the Record/Stream features needed to send phone audio to Prisma. The full Gnani phone conversation requires an account with those features enabled.")
         st.caption("Maximum 15 questions including retries. This first phone version waits for your answer after a beep; it does not support interrupting the AI. Phone and recording charges are billed by Twilio.")
         reviewed=bool(pack.get("review_record",{}).get("reviewer")) and 1 <= len(pack.get("clauses",[])) <= 15
-        api=os.getenv("HMH_CALL_API_URL","").rstrip("/")
-        token=os.getenv("HMH_CALL_API_TOKEN","")
+        api=call_setting("HMH_CALL_API_URL").rstrip("/")
+        token=call_setting("HMH_CALL_API_TOKEN")
+        if api:
+            endpoint=urlsplit(api)
+            st.caption("Backend address: " + str(endpoint.hostname or "invalid URL") + (endpoint.path or ""))
         ready=False
         if not reviewed:
             st.info("Save a reviewed demo pack in the builder before calling.")
@@ -20,14 +44,15 @@ def render_outbound(pack):
             st.info("Call backend is not connected. Run scripts/configure_calls.py locally, start the separate call server, and connect its public HTTPS URL. Streamlit alone cannot answer Twilio callbacks.")
         else:
             try:
-                response=httpx.get(api+"/health",headers={"Authorization":"Bearer "+token},timeout=5)
+                response=httpx.get(api+"/health",headers={"Authorization":"Bearer "+token,"ngrok-skip-browser-warning":"true"},timeout=5)
                 if response.status_code!=200:
-                    st.error("Call backend authentication failed or the endpoint is incorrect.")
+                    st.error(health_error(response.status_code))
                 else:
                     status=response.json()
                     ready=status.get("ready",False)
                     if not ready:
-                        st.info("Backend still needs: "+", ".join(status.get("missing",[])))
+                        if status.get("missing"):
+                            st.info("Backend still needs: "+", ".join(status["missing"]))
                         if status.get("configuration_issue"):st.error(status["configuration_issue"])
             except (httpx.HTTPError,ValueError):
                 st.info("Call backend is not reachable. Start it and check HMH_CALL_API_URL.")

@@ -4,6 +4,12 @@ from pathlib import Path
 from streamlit.testing.v1 import AppTest
 
 class AppTests(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        outbound = patch("app.outbound.render_outbound")
+        outbound.start()
+        self.addCleanup(outbound.stop)
+
     def test_scripted_happy_path(self):
         app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app/main.py")).run()
         self.assertEqual(len(app.exception), 0)
