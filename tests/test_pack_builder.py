@@ -54,3 +54,15 @@ class PackBuilderTests(unittest.TestCase):
         topic = catalog["topics"][0]
         source = topic["sources"][0]
         validate_topics({"topics":[topic], "unresolved":[]}, [{"page":1,"text":source["quote"]}, {"page":1,"text":"More text on that same page."}])
+
+    def test_json_mode_explicitly_requests_json_even_for_plain_system_prompt(self):
+        import os
+        import httpx
+        from unittest.mock import patch
+        from engine.pack_builder import model_json
+        response = httpx.Response(200, json={"choices":[{"message":{"content":"{\"ok\":true}"}}]})
+        with patch.dict(os.environ, {"SCORER_API_KEY":"unit-test-key", "SCORER_MODEL":"gpt-6-luna"}), patch("httpx.post", return_value=response) as post:
+            self.assertEqual(model_json("Extract topics.", {"language":"English"}), {"ok":True})
+            request = post.call_args.kwargs["json"]
+            self.assertEqual(request["response_format"], {"type":"json_object"})
+            self.assertIn("JSON", request["messages"][0]["content"])
