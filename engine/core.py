@@ -100,6 +100,9 @@ class AuditLog:
 
 class Session:
     def __init__(self, pack, directory, mode):
+        if not 1 <= len(pack["clauses"]) <= 15:
+            raise ValueError("Verification packs must contain 1–15 questions")
+        self.answer_turns = 0
         self.pack, self.mode = pack, mode
         self.audit = AuditLog(directory)
         self.index, self.attempt = 0, 0
@@ -123,8 +126,12 @@ class Session:
         if self.status != "active" or not answer.strip():
             raise ValueError("An active session and a nonempty answer are required")
         self.attempt += 1
+        self.answer_turns = getattr(self,"answer_turns",0) + 1
         action = decide(evidence, self.clause["critical"], self.attempt)
-        self.audit.append("assessment", clause_id=self.clause["id"], attempt=self.attempt,
+        budget_exhausted = self.answer_turns >= 15 and (action == "retry" or (action == "pass" and self.index + 1 < len(self.pack["clauses"])))
+        if budget_exhausted:
+            action = "escalate"
+        self.audit.append("assessment", total_answer_turns=self.answer_turns, question_budget_exhausted=budget_exhausted, clause_id=self.clause["id"], attempt=self.attempt,
                           answer=answer, input_source=source, transcript_metadata=transcript_metadata,
                           evidence=asdict(evidence), action=action)
         if action == "retry":

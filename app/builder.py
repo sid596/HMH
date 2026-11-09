@@ -5,7 +5,9 @@ from pathlib import Path
 import streamlit as st
 from engine.provider_errors import ModelRequestError
 from engine.localization import PROFILES
-from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack
+from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack, ranked_topics, MAX_QUESTIONS
+from app.recording import recording_panel
+from app.outbound import render_outbound
 
 
 def open_voice():
@@ -24,15 +26,16 @@ def render_builder(root):
         with left:
             source_mode = st.radio("Start with", ["Example product", "Upload synthetic PDF"], horizontal=True)
         with right:
-            language = st.selectbox("Pack language", list(PROFILES), index=2,
-                format_func=lambda code: PROFILES[code]["label"], key="builder_language")
-            st.caption(f"Voice preview: {PROFILES[language]['voice']} · Timbre v2.5")
+            requested_language = st.selectbox("Customer language", ["auto"] + list(PROFILES),
+                format_func=lambda code: "Automatic - use document language" if code == "auto" else PROFILES[code]["label"], key="builder_language")
+            language = "en-IN" if requested_language == "auto" else requested_language
+            st.caption("The PDF's language is detected automatically. Override it when the customer prefers a different language; this sets the questions and voice.")
         fixture = Path(root) / "output/pdf/nivara_clearcare_fictional_policy.pdf"
         if fixture.exists():
             st.download_button("Download fictional insurance test PDF", fixture.read_bytes(),
                                file_name=fixture.name, mime="application/pdf")
         if source_mode == "Example product":
-            scope = "sample:" + language
+            scope = "sample:" + requested_language
             if st.session_state.get("catalog_scope") != scope:
                 st.session_state.catalog = sample_catalog(language)
                 st.session_state.catalog_scope = scope
@@ -49,16 +52,16 @@ def render_builder(root):
             except Exception as exc:
                 st.error(str(exc) if isinstance(exc, ValueError) else "The PDF could not be read. Try an unlocked text PDF.")
                 return
-            scope = document["sha256"] + ":" + language
+            scope = document["sha256"] + ":" + requested_language
             requests = len(chunks(document))
-            st.caption(f"{len(document['pages'])} readable pages · {requests} topic-generation request(s), plus up to 1 source-review request for documents under 60,000 text characters. Quotes are checked against their cited pages.")
+            st.caption(f"{len(document['pages'])} readable pages · {requests} topic-generation request(s), {1 if requested_language == 'auto' else 0} language-detection request(s), plus up to 1 source-review request for documents under 60,000 text characters. Quotes are checked against their cited pages.")
             configured = bool(os.getenv("SCORER_API_KEY") and os.getenv("SCORER_MODEL"))
             if not configured:
                 st.info("Add SCORER_API_KEY and SCORER_MODEL in Streamlit Secrets to generate topics. The example workspace works without keys.")
             if st.button("Generate topic library", type="primary", disabled=not synthetic or not configured):
                 bar = st.progress(0, text="Reading source pages…")
                 try:
-                    catalog = generate_catalog(document, language,
+                    catalog = generate_catalog(document, requested_language,
                         progress=lambda n,total: bar.progress(n/total, text=f"Processed {n} of {total} document chunks"))
                     st.session_state.catalog = catalog
                     st.session_state.catalog_scope = scope
@@ -71,13 +74,17 @@ def render_builder(root):
             if st.session_state.get("catalog_scope") != scope:
                 return
     catalog = st.session_state.catalog
+    language = catalog["language"]
+    st.caption(f"Question language: {PROFILES[language]['label']} · Voice: {PROFILES[language]['voice']} · Limit: 15 questions, including retries during verification")
+    recording_panel(catalog)
+    catalog = st.session_state.catalog
     state_key = catalog["document"]["sha256"][:12] + language + catalog["generated_at"]
     selection_key = "selected:" + state_key
     if selection_key not in st.session_state:
         st.session_state[selection_key] = {t["id"] for t in catalog["topics"] if t["required"]}
     selected = st.session_state[selection_key]
     selected.update(t["id"] for t in catalog["topics"] if t["required"])
-    topics = catalog["topics"]
+    topics = ranked_topics(catalog)
     m1,m2,m3 = st.columns(3)
     m1.metric("Topics to review", len(topics))
     m2.metric("In your pack", len(selected))
@@ -104,7 +111,7 @@ def render_builder(root):
                 with action:
                     included = topic["id"] in selected
                     if st.button("✓" if included else "+", key="add:" + state_key + topic["id"],
-                                 disabled=topic["required"], help="Required core topic" if topic["required"] else "Remove from pack" if included else "Add to pack", use_container_width=True):
+                                 disabled=topic["required"] or (not included and len(selected)>=MAX_QUESTIONS), help="Required core topic" if topic["required"] else "Remove from pack" if included else "Add to pack", use_container_width=True):
                         if included:
                             selected.remove(topic["id"])
                         else:
@@ -123,11 +130,16 @@ def render_builder(root):
                     for misconception in topic["misconceptions"]:
                         st.write("• " + misconception)
                     st.caption("Reviewer cue: " + topic["risk_reason"])
+                    for note in catalog.get("call_context",{}).get("notes",[]):
+                        if note["topic_id"] == topic["id"]:
+                            st.write("Prior call: " + note["observation"])
+                            st.caption(note["quote"])
                     st.caption("Simpler explanation: " + topic["fallback_explain"])
         if not shown:
             st.info("No topics match these filters. Your pack selection is unchanged.")
     with preview:
         st.subheader("Your verification pack")
+        st.caption(f"{len(selected)} / {MAX_QUESTIONS} questions selected. Required core first, important topics next, optional topics last.")
         st.caption(f"{PROFILES[language]['label']} · {PROFILES[language]['voice']} · selected topics only")
         if not selected:
             st.info("Add a topic with + to begin.")
@@ -136,10 +148,11 @@ def render_builder(root):
                 st.markdown(f"**{n:02d} / {topic['title']}**")
                 st.write(topic["question"])
         with st.expander("Not selected / omission record", expanded=False):
+            default_reason = st.text_input("Shared reason for unselected topics", key="shared-exclusion:" + state_key, help="You can override this for individual topics below. Every exclusion still appears in the saved record.")
             reasons = {}
             for topic in topics:
                 if topic["id"] not in selected:
-                    reasons[topic["id"]] = st.text_input("Reason to exclude: " + topic["title"], key="exclude:" + state_key + topic["id"])
+                    reasons[topic["id"]] = st.text_input("Reason to exclude: " + topic["title"], key="exclude:" + state_key + topic["id"]) or default_reason
             if not reasons:
                 st.write("Every extracted topic is included.")
         st.caption("Only selected topics will be checked. Passing this pack does not establish understanding of the entire document.")
@@ -151,7 +164,7 @@ def render_builder(root):
                 st.write("• " + issue)
         reviewer = st.text_input("Reviewer name", key="reviewer:" + state_key)
         checked = st.checkbox("I reviewed the source, wording and exclusions.", key="reviewed:" + state_key)
-        if st.button("Save reviewed demo pack", type="primary", disabled=not checked):
+        if st.button("Save reviewed demo pack", type="primary", disabled=not checked or len(selected)>MAX_QUESTIONS):
             try:
                 pack = compile_pack(catalog, selected, reviewer, reasons)
                 path = Path(root) / "data" / "packs"
@@ -167,6 +180,7 @@ def render_builder(root):
             st.download_button("Download saved pack + omission record", json.dumps(pack, ensure_ascii=False, indent=2),
                                file_name="hmh-reviewed-demo-pack.json", mime="application/json")
             st.button("Open voice verification →", on_click=open_voice)
+            render_outbound(pack)
     with st.expander("Document processing & provenance"):
         st.caption(catalog["coverage"])
         st.caption(f"Source: {catalog['document']['name']} · SHA-256: {catalog['document']['sha256']}")

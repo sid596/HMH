@@ -10,13 +10,11 @@ from engine.localization import PROFILES, localized_pack
 from engine.scorer import score, fixture_evidence
 from voice.gnani import transcribe, synthesize
 from app.builder import render_builder
+from app.outbound import render_outbound
+from engine.settings import load_local_settings
 
 ROOT = Path(__file__).resolve().parents[1]
-secrets_path = ROOT / ".hmh-secrets.json"
-if secrets_path.exists():
-    for key, value in json.loads(secrets_path.read_text()).items():
-        if key in {"GNANI_API_KEY", "SCORER_API_KEY", "SCORER_MODEL", "SCORER_BASE_URL"}:
-            os.environ.setdefault(key, value)
+load_local_settings()
 st.set_page_config(page_title="Haan Matlab Haan", page_icon="🗣️", layout="wide")
 st.markdown("**HAAN MATLAB HAAN**  /  Make understanding visible")
 workspace = st.radio("Workspace", ["Build a verification pack", "Voice verification"],
@@ -57,10 +55,14 @@ with st.sidebar:
         st.json(pack)
         st.write("Confidence gate: 0.85 (provisional, uncalibrated). Two retries. Low confidence or exhausted retries → human review.")
 
+render_outbound(pack)
 st.warning("Draft rubric and translations: native-speaker review pending. All amounts and terms are invented. This demo cannot certify legal consent or prove understanding.")
 if "session" not in st.session_state:
     st.info(pack["disclosure"])
     pack_matches = pack.get("language") == tts_language
+    within_limit = 1 <= len(pack["clauses"]) <= 15
+    if not within_limit:
+        st.info("This saved pack exceeds the 15-question limit. Return to the builder and save a smaller selection.")
     ready = all(os.getenv(k) for k in ("GNANI_API_KEY", "SCORER_API_KEY", "SCORER_MODEL"))
     if mode == "Voice conversation":
         st.write(f"{voice} asks aloud. Tap the microphone, answer in your own words, then stop recording. Assessment and the next spoken response happen automatically.")
@@ -68,7 +70,7 @@ if "session" not in st.session_state:
         if not ready:
             st.info("Configure GNANI_API_KEY, SCORER_API_KEY and SCORER_MODEL in Streamlit Secrets to start voice conversation.")
     label = "Start conversation" if mode == "Voice conversation" else "Start disclosed demo session"
-    if st.button(label, type="primary", disabled=not pack_matches or (mode == "Voice conversation" and not ready)):
+    if st.button(label, type="primary", disabled=not pack_matches or not within_limit or (mode == "Voice conversation" and not ready)):
         if mode == "Voice conversation":
             conversation = Conversation(pack, ROOT / "data", language, tts_language, voice)
             st.session_state.conversation = conversation
@@ -90,7 +92,7 @@ if session.status != "active":
 else:
     c = session.clause
     st.subheader(f"{session.index + 1}. {c['title']}")
-    st.caption(f"Attempt {session.attempt + 1} of 3 · Critical clause")
+    st.caption(f"Attempt {session.attempt + 1} of 3 · Question turn {getattr(session, 'answer_turns', 0) + 1} / 15 · Critical clause")
     explanation = c["fallback_explain"] if session.attempt >= 2 else c["explain"]
     st.write(explanation)
     st.info(c["question"])
