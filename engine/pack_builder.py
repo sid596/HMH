@@ -36,7 +36,7 @@ def extract_document(content, filename):
             "synthetic": True, "kind": "uploaded_pdf"}
 
 
-def chunks(document, limit=14000):
+def chunks(document, limit=6000):
     """Preserve page numbers even when a long page spans several requests."""
     result, current, size = [], [], 0
     for page in document["pages"]:

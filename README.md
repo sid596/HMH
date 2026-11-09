@@ -102,3 +102,11 @@ For PDF generation choose **Upload synthetic PDF**, choose the output language, 
 - Saved packs include selected clauses, the full topic catalog, exclusion reasons, source document hash, model/prompt version, reviewer and timestamp. The session's audit log includes the pack snapshot. Storage in `data/packs/` and browser session state is local/ephemeral on cloud restarts; download packs and libraries to retain them. This prototype does not reload saved packs after a server restart.
 
 Run `python -m unittest discover -s tests -v` for policy, language, quote validation, selection and UI workflow tests. Live PDF-to-topic model quality and actual voice pronunciation require human evaluation; tests do not measure either.
+
+## Fictional policy for uploader testing
+
+Download **Nivara ClearCare** using the button in the builder, or open `output/pdf/nivara_clearcare_fictional_policy.pdf`. The text PDF contains eight pages and 32 explicitly numbered, entirely invented insurance clauses. It includes the selected schedule, exclusions, exceptions, overlapping waits, grace-period limits, cancellation conditions and a worked deductible/co-payment example.
+
+Upload only the PDF. Keep `nivara_clearcare_reviewer_checklist.txt` and `nivara_clearcare_clause_inventory.json` separate as independent expected-fact checklists. Extraction may group or split clauses, so compare covered facts, conditions, numbers and source pages rather than demanding exactly 32 topic cards. These fixtures do not contain real insurance rules or personal data.
+
+To regenerate the policy, install `reportlab` in your development environment and run `python scripts/create_test_policy.py`. ReportLab is not required to run the deployed uploader. The generated PDF was rendered and visually inspected; the uploader successfully extracts all eight pages. Live model extraction results have not yet been scored against the checklist.

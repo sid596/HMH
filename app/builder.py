@@ -26,6 +26,10 @@ def render_builder(root):
             language = st.selectbox("Pack language", list(PROFILES), index=2,
                 format_func=lambda code: PROFILES[code]["label"], key="builder_language")
             st.caption(f"Voice preview: {PROFILES[language]['voice']} · Timbre v2.5")
+        fixture = Path(root) / "output/pdf/nivara_clearcare_fictional_policy.pdf"
+        if fixture.exists():
+            st.download_button("Download fictional insurance test PDF", fixture.read_bytes(),
+                               file_name=fixture.name, mime="application/pdf")
         if source_mode == "Example product":
             scope = "sample:" + language
             if st.session_state.get("catalog_scope") != scope:

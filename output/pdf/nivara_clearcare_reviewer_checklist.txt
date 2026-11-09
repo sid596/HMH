@@ -1,0 +1,176 @@
+HMH REVIEWER CHECKLIST - DO NOT UPLOAD THIS FILE WITH THE POLICY
+Nivara ClearCare DEMO-1.0 | All terms invented | 32 numbered clauses across 8 pages
+
+Evaluate coverage by facts, not by matching the topic count: the extractor may reasonably group or split topics.
+Check source-page accuracy, numeric values, exception handling, omissions and invented facts.
+
+Clause 01 | Page 1 | Your selected cover and payment option
+  [ ] One adult member is covered from 1 December 2026 through 30 November 2027.
+  [ ] The annual benefit limit is INR 500,000.
+  [ ] The selected premium is INR 12,000 once per policy year, not INR 1,000 each month.
+  [ ] No optional rider is included.
+
+Clause 02 | Page 2 | Who can be covered
+  [ ] Entry age is 18 through 60.
+  [ ] Only the scheduled member is covered; family members are not automatically included.
+
+Clause 03 | Page 2 | What a policy year means
+  [ ] All covered benefits share one annual limit.
+  [ ] Unused benefit does not carry forward and there is no automatic restoration.
+
+Clause 04 | Page 2 | Eligible treatment and hospital stay
+  [ ] Treatment must satisfy coverage, necessity and waiting-period conditions.
+  [ ] A 24-hour admission is normally required, with the day-care exception.
+
+Clause 05 | Page 2 | Where cover applies
+  [ ] Treatment must occur in India, including emergencies.
+  [ ] A non-network hospital can qualify for reimbursement.
+
+Clause 06 | Page 2 | Annual deductible and co-payment
+  [ ] INR 10,000 is one aggregate deductible per policy year, not per admission.
+  [ ] After the deductible, the member pays 10 percent and the insurer pays 90 percent of eligible expenses.
+  [ ] Benefit sublimits apply first; excluded expenses do not exhaust the deductible.
+
+Clause 07 | Page 3 | Inpatient hospital treatment
+  [ ] Specified eligible inpatient expenses are covered.
+  [ ] Coverage does not mean the whole bill is paid; all limits and cost sharing still apply.
+
+Clause 08 | Page 3 | Room charge limit
+  [ ] Room charges are capped at INR 3,000 per covered day.
+  [ ] The member pays the room excess.
+  [ ] There is no proportionate reduction of other eligible treatment charges for choosing a higher-priced room.
+
+Clause 09 | Page 3 | Day-care exception
+  [ ] Cataract surgery and dialysis can qualify without a 24-hour admission.
+  [ ] Ordinary outpatient consultations are not included by this exception.
+  [ ] Applicable waiting periods and the annual limit still apply.
+
+Clause 10 | Page 3 | Ambulance sublimit
+  [ ] Road ambulance is limited to INR 2,000 per covered admission within the annual limit.
+  [ ] Air ambulance and routine transport home are excluded.
+  [ ] Deductible and co-payment apply.
+
+Clause 11 | Page 3 | Accidental dental injury exception
+  [ ] Accidental dental repair has a limit of INR 5,000 per policy year.
+  [ ] Routine and cosmetic dental work remain excluded.
+  [ ] This benefit shares the annual limit and cost sharing.
+
+Clause 12 | Page 4 | Outpatient treatment and medicines
+  [ ] Routine outpatient services, check-ups, vaccinations and unrelated take-home medicines are excluded.
+  [ ] A prescription alone does not override the exclusion.
+
+Clause 13 | Page 4 | Cosmetic and reconstructive treatment
+  [ ] Purely cosmetic treatment is excluded.
+  [ ] Accident-related reconstruction may qualify.
+  [ ] An unrelated cosmetic addition remains excluded even in the same admission.
+
+Clause 14 | Page 4 | Maternity and fertility treatment
+  [ ] The base policy has no maternity, fertility or newborn benefit.
+  [ ] There is no maternity rider in this schedule.
+  [ ] An unrelated covered illness is assessed under the ordinary terms.
+
+Clause 15 | Page 4 | High-altitude sports edge case
+  [ ] Recreational climbing injury above 4,000 metres is excluded.
+  [ ] Ordinary travel or residence at that altitude is not excluded by this clause alone.
+  [ ] The actual activity matters when applying this exclusion.
+
+Clause 16 | Page 4 | Documents and identity misuse
+  [ ] Fabricated bills and claims for another person are not payable.
+  [ ] An accidental spelling mismatch alone does not establish fabrication.
+  [ ] The member can correct a spelling mismatch before a decision based only on that mismatch.
+
+Clause 17 | Page 5 | Initial illness waiting period
+  [ ] There is a 30-day initial wait for illness.
+  [ ] Accidents after the start of cover are exempt from this initial wait.
+  [ ] The initial wait does not restart on uninterrupted renewal.
+
+Clause 18 | Page 5 | Specified treatment waiting period
+  [ ] Planned joint replacement has a 24-month continuous-cover wait.
+  [ ] New accident-related joint repair is exempt from this specified wait.
+  [ ] Other exclusions or a longer applicable wait may still apply.
+
+Clause 19 | Page 5 | Pre-existing condition waiting period
+  [ ] The definition includes diagnosis before inception or advised treatment in the preceding 24 months.
+  [ ] Related claims have a 36-month continuous-cover wait.
+  [ ] Finishing the initial wait does not remove this restriction.
+
+Clause 20 | Page 5 | When waiting periods overlap
+  [ ] All applicable waiting periods must be satisfied.
+  [ ] A permanent exclusion remains excluded after waiting periods finish.
+
+Clause 21 | Page 6 | Payment choice and annual commitment
+  [ ] This schedule requires INR 12,000 annually; the INR 1,000 monthly option is not selected.
+  [ ] Annual payment buys one policy year, not lifetime cover.
+
+Clause 22 | Page 6 | Renewal grace period
+  [ ] Renewal grace lasts 15 days.
+  [ ] Claims arising in the unpaid gap are excluded, even if payment is later made within grace.
+  [ ] Payment within grace preserves waiting-period credit.
+
+Clause 23 | Page 6 | Lapse after grace
+  [ ] Failure to pay by the end of grace causes lapse.
+  [ ] A later new policy restarts waiting periods.
+  [ ] An otherwise eligible prior-period claim can still be submitted on time.
+
+Clause 24 | Page 6 | Renewal price changes
+  [ ] Next-year premiums may change with at least 30 days notice.
+  [ ] The proposal does not retrospectively change current-year terms.
+  [ ] The current premium is not fixed forever.
+
+Clause 25 | Page 7 | Planned hospital admission
+  [ ] Request planned cashless authorisation at least 48 hours in advance when practicable.
+  [ ] Authorisation does not guarantee payment of the entire bill.
+  [ ] Cashless refusal does not automatically rule out reimbursement.
+
+Clause 26 | Page 7 | Emergency notification
+  [ ] Emergency notification is normally due within 48 hours.
+  [ ] Unconsciousness or unavailable communications allows notification within 7 days after the obstacle ends, with an explanation.
+
+Clause 27 | Page 7 | Reimbursement and supporting records
+  [ ] Reimbursement is submitted within 30 days after discharge with the listed records.
+  [ ] Non-network treatment can qualify.
+  [ ] Incomplete records cause a request for evidence and a pending claim, not automatic proof of excluded treatment.
+
+Clause 28 | Page 7 | Worked claim calculation
+  [ ] In the stated example the insurer pays INR 45,000 and the member pays INR 15,000 plus exclusions.
+  [ ] The annual aggregate deductible is not charged again after it is exhausted.
+
+Clause 29 | Page 8 | Initial cancellation window
+  [ ] The initial cancellation window is 15 days from receipt of the policy document.
+  [ ] With no paid claim the refund deducts INR 100.
+  [ ] A paid claim removes the refund under this clause.
+  [ ] Receipt date, not payment date, starts the window.
+
+Clause 30 | Page 8 | Cancellation after the initial window
+  [ ] After the initial window, written cancellation is allowed.
+  [ ] With no paid claim, only whole unused months are refunded, less INR 100.
+  [ ] A started month is used and any paid claim removes that year refund.
+  [ ] Cover ends on the effective cancellation date.
+
+Clause 31 | Page 8 | Changes, optional riders and spoken promises
+  [ ] A written schedule or accepted endorsement is needed to change options.
+  [ ] Mentioning a rider does not include it.
+  [ ] This schedule has no maternity, outpatient or air-ambulance rider.
+  [ ] A proposed change must specify price and effective date.
+
+Clause 32 | Page 8 | Claim explanation, review and meaning of this document
+  [ ] A reduced or declined claim receives a written reason and clause reference.
+  [ ] Internal review may be requested within 30 days of receiving the explanation.
+  [ ] Review does not guarantee reversal.
+  [ ] This is synthetic material with no actual cover or payable premium.
+
+HIGH-VALUE TRAPS TO CHECK
+- Annual INR 12,000 is selected. The INR 1,000 monthly option is NOT selected.
+- Family members are not included.
+- INR 10,000 deductible is annual aggregate, not per admission.
+- Room excess does not proportionately reduce other eligible treatment charges.
+- Day-care and accidental dental exceptions must not disappear.
+- Overseas emergencies are excluded.
+- High-altitude climbing exclusion is not a blanket high-altitude travel exclusion.
+- The emergency notification deadline has an obstacle exception.
+- Unpaid grace-period gap claims stay excluded.
+- Completing waiting periods never adds a permanently excluded benefit.
+- Cancellation refunds depend on whether a claim has been paid.
+- Worked claim: INR 60,000 eligible -> INR 45,000 insurer / INR 15,000 member.
+
+No model evaluation has been performed on this fixture. Native-language generated questions need human review.
