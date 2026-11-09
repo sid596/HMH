@@ -54,15 +54,16 @@ def render_builder(root):
                 return
             scope = document["sha256"] + ":" + requested_language
             requests = len(chunks(document))
-            st.caption(f"{len(document['pages'])} readable pages · {requests} topic-generation request(s), {1 if requested_language == 'auto' else 0} language-detection request(s), plus up to 1 source-review request for documents under 60,000 text characters. Quotes are checked against their cited pages.")
+            st.caption(f"{len(document['pages'])} readable pages · {requests} sections, processed in parallel. Automatic language detection and cross-reference checks may add requests. Repeated results are reused within this session.")
             configured = bool(os.getenv("SCORER_API_KEY") and os.getenv("SCORER_MODEL"))
             if not configured:
                 st.info("Add SCORER_API_KEY and SCORER_MODEL in Streamlit Secrets to generate topics. The example workspace works without keys.")
             if st.button("Generate topic library", type="primary", disabled=not synthetic or not configured):
-                bar = st.progress(0, text="Reading source pages…")
+                bar = st.progress(0, text="Detecting language and generating topic drafts…")
                 try:
-                    catalog = generate_catalog(document, requested_language,
-                        progress=lambda n,total: bar.progress(n/total, text=f"Processed {n} of {total} document chunks"))
+                    cache = st.session_state.setdefault("topic_generation_cache",{})
+                    catalog = generate_catalog(document, requested_language, cache=cache,
+                        progress=lambda n,total: bar.progress(n/total, text=f"Generated topics for {n} of {total} sections"))
                     st.session_state.catalog = catalog
                     st.session_state.catalog_scope = scope
                     st.rerun()
@@ -75,6 +76,12 @@ def render_builder(root):
                 return
     catalog = st.session_state.catalog
     language = catalog["language"]
+    performance = catalog.get("performance")
+    if performance:
+        if performance["cache_hit"]:
+            st.caption("Loaded saved results for this document and language. No new topic-generation requests were needed.")
+        else:
+            st.caption(f"Topic drafts generated in {performance['total_generation_seconds']:.1f} seconds · Source checks completed")
     st.caption(f"Question language: {PROFILES[language]['label']} · Voice: {PROFILES[language]['voice']} · Limit: 15 questions, including retries during verification")
     recording_panel(catalog)
     catalog = st.session_state.catalog
@@ -147,14 +154,13 @@ def render_builder(root):
             with st.container(border=True):
                 st.markdown(f"**{n:02d} / {topic['title']}**")
                 st.write(topic["question"])
-        with st.expander("Not selected / omission record", expanded=False):
-            default_reason = st.text_input("Shared reason for unselected topics", key="shared-exclusion:" + state_key, help="You can override this for individual topics below. Every exclusion still appears in the saved record.")
-            reasons = {}
-            for topic in topics:
-                if topic["id"] not in selected:
-                    reasons[topic["id"]] = st.text_input("Reason to exclude: " + topic["title"], key="exclude:" + state_key + topic["id"]) or default_reason
-            if not reasons:
+        with st.expander("Topics not selected", expanded=False):
+            excluded = [topic for topic in topics if topic["id"] not in selected]
+            for topic in excluded:
+                st.write("• " + topic["title"])
+            if not excluded:
                 st.write("Every extracted topic is included.")
+            st.caption("These topics are recorded automatically in the pack. No exclusion reasons are required.")
         st.caption("Only selected topics will be checked. Passing this pack does not establish understanding of the entire document.")
         if catalog["document"]["kind"] != "sample_text":
             st.caption("No company-approved core has been configured for this uploaded document. Risk labels are model suggestions; this demo has no authenticated reviewer roles.")
@@ -166,7 +172,7 @@ def render_builder(root):
         checked = st.checkbox("I reviewed the source, wording and exclusions.", key="reviewed:" + state_key)
         if st.button("Save reviewed demo pack", type="primary", disabled=not checked or len(selected)>MAX_QUESTIONS):
             try:
-                pack = compile_pack(catalog, selected, reviewer, reasons)
+                pack = compile_pack(catalog, selected, reviewer)
                 path = Path(root) / "data" / "packs"
                 path.mkdir(parents=True, exist_ok=True)
                 (path / (pack["review_hash"] + ".json")).write_text(json.dumps(pack, ensure_ascii=False, indent=2))

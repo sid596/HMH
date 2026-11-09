@@ -9,11 +9,12 @@ class PackBuilderTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Required"):
             compile_pack(catalog, {"contribution"}, "Demo reviewer", {})
 
-    def test_exclusion_needs_reason_and_is_preserved(self):
+    def test_exclusion_needs_no_reason_and_optional_reason_is_preserved(self):
         catalog = sample_catalog("mr-IN")
         selected = {"contribution", "returns", "early_exit"}
-        with self.assertRaisesRegex(ValueError, "reason"):
-            compile_pack(catalog, selected, "Demo reviewer", {})
+        no_reason = compile_pack(catalog, selected, "Demo reviewer")
+        self.assertIsNone(no_reason["review_record"]["excluded_topics"][0]["reason"])
+        self.assertEqual(no_reason["review_record"]["excluded_topics"][0]["selection_status"], "not_selected")
         pack = compile_pack(catalog, selected, "Demo reviewer", {"cancellation": "Reviewed separately in the demo"})
         self.assertEqual(len(pack["clauses"]), 3)
         self.assertEqual(pack["language"], "mr-IN")
@@ -79,3 +80,40 @@ class PackBuilderTests(unittest.TestCase):
         caller.return_value = {"resolved":[{"issue_index":0,"sources":[{"page":1,"quote":"A fabricated source passage does not count"}]}]}
         with self.assertRaises(ValueError):
             resolve_source_issues(catalog["document"], issues, caller)
+
+    def test_parallel_sections_and_session_cache_preserve_order_and_isolation(self):
+        from threading import Barrier
+        barrier = Barrier(3)
+        base = sample_catalog("en-IN")
+        template = base["topics"][0]
+        quote = template["sources"][0]["quote"]
+        document = {"sha256":"parallel-fixture", "name":"fixture", "pages":[
+            {"page":n,"text":quote + " " + "x"*5200} for n in range(1,4)]}
+        calls = []
+        def caller(system, payload):
+            page = payload["pages"][0]["page"]
+            calls.append(page)
+            barrier.wait(timeout=5)
+            topic = deepcopy(template)
+            topic["title"] = f"Topic {page}"
+            topic["sources"] = [{"page":page,"quote":quote}]
+            return {"topics":[topic],"unresolved":[]}
+        cache = {}
+        first = generate_catalog(document,"en-IN",caller=caller,cache=cache,max_workers=3)
+        self.assertEqual([t["title"] for t in first["topics"]],["Topic 1","Topic 2","Topic 3"])
+        first["topics"][0]["title"] = "Modified outside cache"
+        second = generate_catalog(document,"en-IN",caller=caller,cache=cache,max_workers=3)
+        self.assertEqual(len(calls),3)
+        self.assertTrue(second["performance"]["cache_hit"])
+        self.assertEqual(second["topics"][0]["title"],"Topic 1")
+
+    def test_fast_document_setting_is_scoped_to_supported_provider_and_model(self):
+        import os
+        from unittest.mock import patch
+        from engine.pack_builder import document_reasoning_effort
+        with patch.dict(os.environ,{"SCORER_MODEL":"gpt-6-luna", "SCORER_BASE_URL":"https://api.openai.com/v1"},clear=True):
+            self.assertEqual(document_reasoning_effort(),"none")
+            with patch.dict(os.environ,{"SCORER_BASE_URL":"https://example.com/v1"}):
+                self.assertIsNone(document_reasoning_effort())
+            with patch.dict(os.environ,{"SCORER_MODEL":"another-model"}):
+                self.assertIsNone(document_reasoning_effort())

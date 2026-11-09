@@ -12,7 +12,7 @@ class BuilderAppTests(unittest.TestCase):
         next(b for b in app.button if b.label == "+").click().run()
         self.assertEqual([m.value for m in app.metric], ["4", "3", "1"])
         next(t for t in app.text_input if t.label == "Reviewer name").set_value("Demo reviewer").run()
-        next(t for t in app.text_input if t.label.startswith("Reason to exclude:")).set_value("Covered in a separate demo step").run()
+        self.assertFalse(any("reason" in t.label.lower() for t in app.text_input))
         next(c for c in app.checkbox if c.label == "I reviewed the source, wording and exclusions.").check().run()
         next(b for b in app.button if b.label == "Save reviewed demo pack").click().run()
         self.assertFalse(app.exception)
