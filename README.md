@@ -110,3 +110,9 @@ Download **Nivara ClearCare** using the button in the builder, or open `output/p
 Upload only the PDF. Keep `nivara_clearcare_reviewer_checklist.txt` and `nivara_clearcare_clause_inventory.json` separate as independent expected-fact checklists. Extraction may group or split clauses, so compare covered facts, conditions, numbers and source pages rather than demanding exactly 32 topic cards. These fixtures do not contain real insurance rules or personal data.
 
 To regenerate the policy, install `reportlab` in your development environment and run `python scripts/create_test_policy.py`. ReportLab is not required to run the deployed uploader. The generated PDF was rendered and visually inspected; the uploader successfully extracts all eight pages. Live model extraction results have not yet been scored against the checklist.
+
+### JSON mode and document-chunk context
+
+Topic requests explicitly instruct the model to return a JSON object, as required by the JSON-object response mode. Chunk prompts distinguish actual missing terms from cross-references handled in other chunks. For documents up to 60,000 extracted characters, unresolved notes can trigger one additional full-source review request. A note is cleared only when the reviewer model supplies a source quote that the code verifies on the cited page; the original note and resolution evidence remain in the exported catalog and compiled pack. This automated check is not human approval or a guarantee of semantic correctness. Larger documents retain unresolved notes for human review without this extra request.
+
+A live local integration run with the configured GPT-6 Luna model generated 32 topic drafts from the eight-page fixture, validated their source quotes, resolved three chunk-context notes against the full source and compiled a draft pack. This verifies connectivity and workflow, not completeness or comprehension accuracy.

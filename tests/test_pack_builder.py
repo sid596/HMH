@@ -66,3 +66,16 @@ class PackBuilderTests(unittest.TestCase):
             request = post.call_args.kwargs["json"]
             self.assertEqual(request["response_format"], {"type":"json_object"})
             self.assertIn("JSON", request["messages"][0]["content"])
+
+    def test_missing_context_flag_requires_real_full_source_evidence_to_clear(self):
+        from engine.pack_builder import resolve_source_issues
+        catalog = sample_catalog("en-IN")
+        issues = ["Schedule missing from this chunk", "A genuinely unspecified customer detail"]
+        quote = catalog["document"]["pages"][0]["text"]
+        caller = Mock(return_value={"resolved":[{"issue_index":0,"sources":[{"page":1,"quote":quote}]}]})
+        remaining, resolved = resolve_source_issues(catalog["document"], issues, caller)
+        self.assertEqual(remaining, [issues[1]])
+        self.assertEqual(resolved[0]["issue"], issues[0])
+        caller.return_value = {"resolved":[{"issue_index":0,"sources":[{"page":1,"quote":"A fabricated source passage does not count"}]}]}
+        with self.assertRaises(ValueError):
+            resolve_source_issues(catalog["document"], issues, caller)

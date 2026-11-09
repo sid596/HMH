@@ -51,7 +51,7 @@ def render_builder(root):
                 return
             scope = document["sha256"] + ":" + language
             requests = len(chunks(document))
-            st.caption(f"{len(document['pages'])} readable pages · {requests} text-model request(s) · Each source quote is checked against its cited page.")
+            st.caption(f"{len(document['pages'])} readable pages · {requests} topic-generation request(s), plus up to 1 source-review request for documents under 60,000 text characters. Quotes are checked against their cited pages.")
             configured = bool(os.getenv("SCORER_API_KEY") and os.getenv("SCORER_MODEL"))
             if not configured:
                 st.info("Add SCORER_API_KEY and SCORER_MODEL in Streamlit Secrets to generate topics. The example workspace works without keys.")
