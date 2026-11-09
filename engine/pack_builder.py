@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+from engine.provider_errors import check_model_response
 from engine.core import pack_hash, utc_now
 from engine.localization import localized_pack, PROFILES
 
@@ -63,7 +64,7 @@ def model_json(system, payload):
         json={"model": model, "messages": [{"role": "system", "content": system},
              {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
              "response_format": {"type": "json_object"}}, timeout=120)
-    response.raise_for_status()
+    check_model_response(response)
     return json.loads(response.json()["choices"][0]["message"]["content"])
 
 

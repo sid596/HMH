@@ -112,7 +112,7 @@ else:
             if changed:
                 st.rerun()
         if conversation.error:
-            st.error(f"Could not complete {conversation.error['stage']} ({conversation.error['type']}). No pass was recorded. Record again, retry, or refer to a human.")
+            st.error(conversation.error.get("message") or f"Could not complete {conversation.error['stage']} ({conversation.error['type']}). No pass was recorded. Record again, retry, or refer to a human.")
             if recording is not None and st.button("Retry this answer"):
                 with st.spinner("Retrying…"):
                     changed = conversation.receive(recording.getvalue(), transcribe, score, retry=True)

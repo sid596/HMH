@@ -1,6 +1,7 @@
 import json
 import os
 import httpx
+from engine.provider_errors import check_model_response
 from engine.core import Evidence
 
 SYSTEM = '''You assess a synthetic customer's teach-back against ONLY the supplied approved/draft rubric.
@@ -26,7 +27,7 @@ def score(answer, clause):
         json={"model": model, "messages": [{"role": "system", "content": SYSTEM},
             {"role": "user", "content": json.dumps({"rubric": clause, "customer_answer": answer}, ensure_ascii=False)}],
               "response_format": {"type": "json_object"}}, timeout=60)
-    response.raise_for_status()
+    check_model_response(response)
     return Evidence.validate(json.loads(response.json()["choices"][0]["message"]["content"]), clause)
 
 

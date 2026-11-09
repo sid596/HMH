@@ -2,6 +2,7 @@
 import hashlib
 import io
 import wave
+from engine.provider_errors import ModelRequestError
 from engine.core import Session
 from engine.localization import localized_pack
 
@@ -106,5 +107,7 @@ class Conversation:
         except Exception as exc:
             self.failed.add(token)
             self.error = {"stage": stage, "type": type(exc).__name__}
+            if isinstance(exc, ModelRequestError):
+                self.error["message"] = str(exc)
             self.session.audit.append("voice_turn_failed", stage=stage, error_type=type(exc).__name__)
             return False

@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import streamlit as st
+from engine.provider_errors import ModelRequestError
 from engine.localization import PROFILES
 from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack
 
@@ -62,6 +63,9 @@ def render_builder(root):
                     st.session_state.catalog = catalog
                     st.session_state.catalog_scope = scope
                     st.rerun()
+                except ModelRequestError as exc:
+                    st.error(str(exc))
+                    st.caption("Generation stopped. No new library was accepted and no automatic retry was made.")
                 except Exception as exc:
                     st.error(f"Topic generation stopped ({type(exc).__name__}). No new library was accepted. Check the document/configuration and retry explicitly.")
             if st.session_state.get("catalog_scope") != scope:
