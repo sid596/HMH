@@ -238,3 +238,18 @@ class ProviderDiagnosticTests(unittest.TestCase):
         message=provider_error(error)
         self.assertIn('21205',message)
         self.assertNotIn('private response',message)
+
+
+class ZeroCodeDiagnosticTests(unittest.TestCase):
+    def test_zero_error_uses_http_and_redacted_explanation(self):
+        from twilio.base.exceptions import TwilioRestException
+        from telephony.service import provider_error
+        with patch.dict(os.environ,ENV,clear=True):
+            exc=TwilioRestException(403,'/test','Trial rejects '+ENV['TWILIO_AUTH_TOKEN']+' '+ENV['TWILIO_TO_NUMBER']+' https://private.example/token',0)
+            result=provider_error(exc)
+            self.assertIn('HTTP 403',result)
+            self.assertIn('Trial rejects',result)
+            self.assertNotIn(ENV['TWILIO_AUTH_TOKEN'],result)
+            self.assertNotIn(ENV['TWILIO_TO_NUMBER'],result)
+            self.assertNotIn('private.example',result)
+            self.assertNotIn('/errors/0',result)

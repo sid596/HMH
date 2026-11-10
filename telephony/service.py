@@ -88,6 +88,19 @@ def provider_error(exc):
              21210:"Twilio rejected the caller number. Use a number this account may call from.",
              21608:"The trial destination must be verified in Twilio.",21215:"Check Twilio geographic calling permissions for the destination.",
              21214:"This destination is not permitted for this account."}
+    if code in (0,"0",None) and getattr(exc,"status",None):
+        # Some trial gateways return code=0. Keep the HTTP status and a
+        # redacted explanation instead of inventing a documentation error code.
+        message=str(getattr(exc,"msg",None) or getattr(exc,"detail",None) or "No provider explanation supplied")
+        for key in ("TWILIO_ACCOUNT_SID","TWILIO_AUTH_TOKEN","TWILIO_FROM_NUMBER","TWILIO_TO_NUMBER",
+                    "HMH_CALL_API_TOKEN","GNANI_API_KEY","SCORER_API_KEY"):
+            value=os.getenv(key,"")
+            if value:message=message.replace(value,"[redacted]")
+        message=re.sub(r"https?://[^\s]+","[URL]",message)
+        message=re.sub(r"\+\d[\d ()-]{6,}","[phone]",message)
+        message=re.sub(r"\b(?:AC|CA|RE|SK)[a-fA-F0-9]{32}\b","[identifier]",message)
+        message=" ".join(message.split())[:500]
+        return f"Twilio rejected call setup (HTTP {exc.status}; no specific error code): {message}"
     if code in actions:
         return actions[code]+f" (Twilio {code})"
     if isinstance(code,int) or (isinstance(code,str) and code.isdigit()):
