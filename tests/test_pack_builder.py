@@ -188,3 +188,19 @@ class PackBuilderTests(unittest.TestCase):
                     self.assertTrue(strict_topic_output_enabled(),model)
             with patch.dict(os.environ,{'SCORER_MODEL':'gpt-6-luna','SCORER_BASE_URL':'https://other.example/v1'}):
                 self.assertFalse(strict_topic_output_enabled())
+
+    def test_spanish_question_in_english_topic_is_rejected(self):
+        from engine.pack_builder import validate_topic_language,TopicValidationError
+        topic=deepcopy(sample_catalog("en-IN")["topics"][0])
+        topic["question"]="Si una persona de 62 años quiere entrar en esta póliza, o si el cónyuge del miembro quiere estar cubierto sin otra póliza, ¿quedaría cubierto según estas reglas?"
+        with self.assertRaisesRegex(TopicValidationError,"question appears to be in es"):
+            validate_topic_language(topic,"en-IN")
+
+    def test_language_guard_accepts_existing_localized_fixtures_and_preserves_source_language(self):
+        from engine.pack_builder import validate_topic_language
+        for language in ("en-IN","hi-IN","mr-IN","kn-IN","hi-en"):
+            for topic in sample_catalog(language)["topics"]:
+                validate_topic_language(topic,language)
+        topic=deepcopy(sample_catalog("en-IN")["topics"][0])
+        topic["sources"][0]["quote"]="Una cita de fuente puede permanecer en el idioma original del documento."
+        validate_topic_language(topic,"en-IN")

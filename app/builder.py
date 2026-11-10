@@ -80,6 +80,9 @@ def render_builder(root):
             if st.session_state.get("catalog_scope") != scope:
                 return
     catalog = st.session_state.catalog
+    if catalog["document"]["kind"] != "sample_text" and catalog.get("prompt_version") != TOPIC_PROMPT_VERSION:
+        st.warning("This topic draft predates the latest validation checks. Generate the topic library again before reviewing or calling.")
+        return
     language = catalog["language"]
     performance = catalog.get("performance")
     if performance:

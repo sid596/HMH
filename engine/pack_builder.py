@@ -2,6 +2,7 @@
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import perf_counter
+from threading import local
 from urllib.parse import urlsplit
 import hashlib
 import io
@@ -15,7 +16,8 @@ from engine.localization import localized_pack, PROFILES
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 300
 MAX_QUESTIONS = 15
-TOPIC_PROMPT_VERSION = "topic-draft-9-strict-models"
+TOPIC_PROMPT_VERSION = "topic-draft-10-language-guard"
+_LANGUAGE_DETECTORS=local()
 
 
 class TopicValidationError(ValueError):
@@ -126,7 +128,7 @@ Return ONLY a JSON object: {"topics": [...], "unresolved": [strings]}. Each topi
 title, category, summary, explain, question, fallback_explain (nonempty strings),
 must_have_facts (1–6 nonempty strings), misconceptions (1–5 nonempty strings),
 risk (high|standard), priority_score (integer 1–100, highest for financial obligations, material coverage/exclusions and loss of cover), risk_reason (string), sources (1–4 objects with page integer and quote string).
-All explanations, questions, facts and misconceptions must be in requested language.
+All generated titles, categories, summaries, explanations, questions, risk reasons, facts and misconceptions must be in requested language. Never switch to Spanish or any other language. Only source quotes preserve the original document language.
 Keep numeric amounts, percentages and time periods as digits. Preserve the original source quote
 verbatim in its original language. It must occur on the cited page. Required facts must be supported
 by those quotes, including conditions and exceptions. Missing customer-specific choices must be
@@ -149,7 +151,36 @@ def topic_response_schema():
     return obj({"topics":array(obj(fields),0,15),"unresolved":{"type":"array","items":text}})
 
 
-def validate_topics(raw, pages):
+def validate_topic_language(topic, language):
+    """Reject confident language drift; this is not native-speaker review."""
+    from langdetect import DetectorFactory, LangDetectException
+    from langdetect.detector_factory import PROFILES_DIRECTORY
+    # A private seeded detector avoids shared random state in parallel workers.
+    factory=getattr(_LANGUAGE_DETECTORS,"factory",None)
+    if factory is None:
+        factory=DetectorFactory()
+        factory.load_profile(PROFILES_DIRECTORY)
+        factory.seed=0
+        _LANGUAGE_DETECTORS.factory=factory
+    allowed={"en-IN":{"en"},"hi-IN":{"hi","mr"},"mr-IN":{"hi","mr"},
+             "hi-en":{"hi","en","mr"},"kn-IN":{"kn"}}[language]
+    for field in ("summary","explain","question","fallback_explain","must_have_facts","misconceptions"):
+        value=topic.get(field,"")
+        text=" ".join(value) if isinstance(value,list) else value
+        if len(text)<80:continue  # short phrases are unreliable for detection
+        # Hinglish transliteration is poorly classified by generic detectors.
+        if language=="hi-en" and not re.search(r"[¿¡áéíóúñÁÉÍÓÚÑ]",text):continue
+        try:
+            detector=factory.create()
+            detector.append(text)
+            predictions=detector.get_probabilities()
+        except LangDetectException:
+            continue
+        if predictions and predictions[0].prob>=0.98 and predictions[0].lang not in allowed:
+            raise TopicValidationError(f"Generated {field} appears to be in {predictions[0].lang}, not {PROFILES[language]['label']}. Regenerate this section; no mixed-language draft was accepted.")
+
+
+def validate_topics(raw, pages, language=None):
     if not isinstance(raw, dict) or not isinstance(raw.get("topics"), list) or not isinstance(raw.get("unresolved"), list):
         raise TopicValidationError("Invalid topic generator response")
     if len(raw["topics"]) > 15 or not all(isinstance(x, str) for x in raw["unresolved"]):
@@ -182,6 +213,8 @@ def validate_topics(raw, pages):
             raise TopicValidationError("Invalid topic priority")
         topic["priority_score"] = priority
         topic["required"] = False  # A model cannot set company policy.
+        if language is not None:
+            validate_topic_language(topic,language)
     return raw
 
 
@@ -280,7 +313,7 @@ def generate_catalog(document, language, progress=None, caller=None, *, cache=No
     for index,batch in enumerate(batches):
         key = prefix + ":batch:" + language + ":" + str(index)
         if key in cache:
-            results[index] = validate_topics(deepcopy(cache[key]),batch)
+            results[index] = validate_topics(deepcopy(cache[key]),batch,language)
             reused += 1
         else:
             pending.append((index,batch,key))
@@ -290,7 +323,7 @@ def generate_catalog(document, language, progress=None, caller=None, *, cache=No
     topics_started = perf_counter()
     def process(batch):
         try:
-            return validate_topics(caller(EXTRACT_PROMPT, {"language":PROFILES[language]["label"],"pages":batch}),batch)
+            return validate_topics(caller(EXTRACT_PROMPT, {"language":PROFILES[language]["label"],"language_code":language,"pages":batch}),batch,language)
         except TopicValidationError as exc:
             pages=", ".join(str(n) for n in sorted({p["page"] for p in batch}))
             raise TopicValidationError(f"Pages {pages}: {exc}. No topics from this section were accepted.") from exc
@@ -389,6 +422,7 @@ def compile_pack(catalog, selected, reviewer, reasons=None):
     pack["clauses"] = []
     for topic in topics:
         if topic["id"] in selected:
+            validate_topic_language(topic,catalog["language"])
             clause = {k: deepcopy(topic[k]) for k in ("id", "title", "explain", "question", "fallback_explain", "must_have_facts", "misconceptions", "sources")}
             clause["critical"] = True
             pack["clauses"].append(clause)
