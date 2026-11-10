@@ -36,3 +36,4 @@ uvicorn==0.54.0
 websockets==17.4
 langdetect==1.0.9
 six==1.17.0
+imageio-ffmpeg==0.6.0

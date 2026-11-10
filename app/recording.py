@@ -4,12 +4,14 @@ import hashlib
 import streamlit as st
 from engine.call_context import wav_segments, transcribe_recording, analyse_context
 from voice.gnani import transcribe
+from engine.audio_import import normalize_recording
 
 
 def recording_panel(catalog):
     with st.expander("Add previous-call context", expanded=False):
         st.write("Upload a synthetic agent/customer call to identify questions and possible confusion. Policy wording remains the source of truth.")
-        upload = st.file_uploader("Prior call recording (16-bit WAV, up to 10 minutes)",type=["wav"],max_upload_size=60,key="prior_call_audio")
+        upload = st.file_uploader("Prior call recording (audio/video, up to 10 minutes)",type=["wav","mp4","m4a","mp3","ogg","webm","flac","aac"],max_upload_size=60,key="prior_call_audio")
+        st.caption("Upload your recording directly. HMH extracts the audio and converts it locally when needed; video is not sent to Prisma. Maximum 60 MB / 10 minutes.")
         mapping = st.selectbox("Speaker channels",["unknown","agent_left","customer_left"],
             format_func=lambda k:{"unknown":"Mono/mixed or unknown speakers","agent_left":"Stereo: agent left, customer right","customer_left":"Stereo: customer left, agent right"}[k])
         st.caption("Channel labels must be known from the recording setup. Mixed audio does not provide reliable agent/customer labels. Chunk boundaries can affect recognition.")
@@ -18,13 +20,25 @@ def recording_panel(catalog):
             st.info("Configure GNANI_API_KEY to transcribe a recording.")
         if upload is not None:
             try:
-                count=len(wav_segments(upload.getvalue(),mapping))
+                original=upload.getvalue()
+                audio_hash=hashlib.sha256(original).hexdigest()
+                cached=st.session_state.get("normalized_prior_audio")
+                if not cached or cached[0]!=audio_hash:
+                    if cached:
+                        st.session_state.pop("prior_transcript",None)
+                    with st.spinner("Preparing recording audio…"):
+                        cached=(audio_hash,normalize_recording(original))
+                    st.session_state.normalized_prior_audio=cached
+                audio=cached[1]
+                count=len(wav_segments(audio,mapping))
                 st.caption(f"{count} Prisma request(s) to transcribe, then 1 text-model request to link it to topics.")
                 if st.button("Transcribe previous call",disabled=not synthetic or not os.getenv("GNANI_API_KEY")):
                     bar=st.progress(0,text="Transcribing synthetic call…")
                     try:
-                        transcript=transcribe_recording(upload.getvalue(),transcribe,mapping,
+                        transcript=transcribe_recording(audio,transcribe,mapping,
                             progress=lambda n,total:bar.progress(n/total,text=f"Transcribed {n}/{total} clips"))
+                        transcript["original_sha256"]=audio_hash
+                        transcript["source_filename"]=upload.name
                         st.session_state.prior_transcript=transcript
                         st.success("Transcript ready. Check the text and speaker labels below before linking it to topics.")
                     except Exception as exc:
@@ -56,4 +70,5 @@ def recording_panel(catalog):
             for note in context["notes"]:
                 st.write(f"**{note['topic_id']} · {note['kind'].replace('_',' ')} · {note['speaker']}**")
                 st.write(note["observation"])
+                if note.get("attribution_warning"):st.caption(note["attribution_warning"])
                 st.caption("Transcript evidence: "+note["quote"])

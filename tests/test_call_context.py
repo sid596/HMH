@@ -46,7 +46,10 @@ class CallContextTests(unittest.TestCase):
         transcript={'segments':[{'speaker':'unknown','text':'Early withdrawal is completely free'}]}
         note={'topic_id':'early_exit','segment_index':0,'quote':'Early withdrawal is completely free','kind':'agent_claim','observation':'Potential contradiction'}
         caller=Mock(return_value={'preferred_language':None,'preference_evidence':None,'notes':[note]})
-        with self.assertRaises(ValueError):analyse_context(catalog,transcript,caller)
+        unknown=analyse_context(catalog,transcript,caller)
+        self.assertEqual(unknown['call_context']['notes'][0]['kind'],'mentioned')
+        self.assertEqual(unknown['call_context']['notes'][0]['speaker'],'unknown')
+        note['kind']='agent_claim'
         transcript['segments'][0]['speaker']='agent'
         result=analyse_context(catalog,transcript,caller)
         self.assertEqual(result['topics'],catalog['topics'])

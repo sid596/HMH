@@ -6,6 +6,7 @@ import wave
 import numpy as np
 from engine.pack_builder import model_json, normalize
 from engine.localization import PROFILES
+from engine.audio_import import normalize_recording
 
 
 def wav_segments(content, channel_roles="unknown"):
@@ -43,7 +44,7 @@ def wav_segments(content, channel_roles="unknown"):
 
 
 def transcribe_recording(content, transcriber, channel_roles="unknown", progress=None):
-    clips = wav_segments(content, channel_roles)
+    clips = wav_segments(normalize_recording(content), channel_roles)
     segments = []
     for i, clip in enumerate(clips):
         result = transcriber(clip["audio"], language="indic-auto")
@@ -70,7 +71,7 @@ def analyse_context(catalog, transcript, caller=model_json):
         "notes: [{topic_id: string, segment_index: integer, quote: exact transcript excerpt, "
         "kind: confusion|customer_question|agent_claim|mentioned, observation: short string}]}. "
         "Only report a language preference when a segment explicitly labelled customer requests it; "
-        "a segment's language is NOT proof of preference. Never assign agent/customer roles to unknown speakers. "
+        "a segment's language is NOT proof of preference. Never assign agent/customer roles to unknown speakers. For unknown or mixed speaker segments, use only confusion or mentioned, never agent_claim or customer_question. "
         "Each note must match the supplied segment and topic, with a verbatim quote of at least 5 characters. "
         "Do not assume already-discussed means understood. Notes highlight potential issues for human review, not proven mis-selling. "
         "Supported languages: hi-IN, hi-en, en-IN, mr-IN, kn-IN. Return at most 30 notes.",
@@ -83,17 +84,21 @@ def analyse_context(catalog, transcript, caller=model_json):
         if type(index) is not int or not 0 <= index < len(segments) or not isinstance(quote,str) or len(normalize(quote)) < 5 or normalize(quote) not in normalize(segments[index]["text"]):
             raise ValueError("Call-context evidence was not found in the cited transcript segment")
         return segments[index]
-    notes = raw.get("notes")
+    notes = deepcopy(raw.get("notes"))
     if not isinstance(notes,list) or len(notes)>30:
         raise ValueError("Invalid call-context analysis")
     for note in notes:
         source = evidence(note)
         if note.get("topic_id") not in known or note.get("kind") not in {"confusion","customer_question","agent_claim","mentioned"} or not isinstance(note.get("observation"),str):
             raise ValueError("Invalid call-context note")
-        if note["kind"] == "agent_claim" and source["speaker"] != "agent":
-            raise ValueError("Agent claims require a verified agent channel/label")
-        if note["kind"] == "customer_question" and source["speaker"] != "customer":
-            raise ValueError("Customer questions require a verified customer channel/label")
+        expected_role={"agent_claim":"agent","customer_question":"customer"}.get(note["kind"])
+        if expected_role and source["speaker"] != expected_role:
+            if source["speaker"] == "unknown":
+                note["original_kind"]=note["kind"]
+                note["kind"]="mentioned"
+                note["attribution_warning"]="Speaker is unknown; this is an unattributed discussion, not a verified agent claim or customer question."
+            else:
+                raise ValueError("Call note conflicts with the reviewed speaker label")
         note["speaker"] = source["speaker"]
     preference = raw.get("preferred_language")
     if preference is not None:

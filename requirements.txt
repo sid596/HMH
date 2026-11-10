@@ -3,3 +3,4 @@ httpx>=0.28,<1
 pypdf>=6,<7
 numpy>=1.25,<3
 langdetect==1.0.9
+imageio-ffmpeg==0.6.0
