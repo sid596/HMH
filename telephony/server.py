@@ -34,8 +34,16 @@ async def signed_form(request,record):
     base=os.getenv("HMH_PUBLIC_BASE_URL","").rstrip("/")
     # Validate the configured public URL rather than trusting proxy Host headers.
     url=base+request.url.path+("?"+request.url.query if request.url.query else "")
-    if not token or not RequestValidator(token).validate(url,form,request.headers.get("X-Twilio-Signature","")):
-        raise HTTPException(403,"Invalid Twilio signature")
+    signature=request.headers.get("X-Twilio-Signature","")
+    valid_signature=bool(token and signature and RequestValidator(token).validate(url,form,signature))
+    # Some trial answer requests arrive without a provider signature. Only
+    # those requests may use an expiring per-call capability, never an account-wide bypass.
+    supplied=request.query_params.get("trial_token","")
+    valid_trial=(not signature and record.trial and record.sid is not None
+        and time.time()-record.created<1800
+        and hmac.compare_digest(record.webhook_token,supplied))
+    if not valid_signature and not valid_trial:
+        raise HTTPException(403,"Invalid callback authentication")
     if form.get("AccountSid")!=os.getenv("TWILIO_ACCOUNT_SID"):
         raise HTTPException(403,"Account mismatch")
     sid=form.get("CallSid")

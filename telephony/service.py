@@ -114,6 +114,7 @@ class PhoneCall:
     conversation:Conversation
     created:float=field(default_factory=time.time)
     media_token:str=field(default_factory=lambda:secrets.token_urlsafe(32))
+    webhook_token:str=field(default_factory=lambda:secrets.token_urlsafe(32))
     phase:str="preparing"
     sid:str|None=None
     error:str|None=None
@@ -159,6 +160,10 @@ class CallService:
     def base(self):
         return os.environ["HMH_PUBLIC_BASE_URL"].rstrip("/")
 
+    def webhook_url(self,record,path):
+        url=self.base()+path
+        return url+"?trial_token="+record.webhook_token if record.trial else url
+
     def create(self,pack,request_id):
         validate_config()
         validate_pack(pack)
@@ -194,8 +199,8 @@ class CallService:
                 return
             record.phase="dialing"
             parameters={"to":os.environ["TWILIO_TO_NUMBER"],
-                "url":self.base()+f"/twilio/answer/{record.id}",
-                "status_callback":self.base()+f"/twilio/status/{record.id}"}
+                "url":self.webhook_url(record,f"/twilio/answer/{record.id}"),
+                "status_callback":self.webhook_url(record,f"/twilio/status/{record.id}")}
             # New trial accounts choose their shared caller number themselves.
             # Do not send paid-account-only optional call parameters.
             if not record.trial:
@@ -252,7 +257,7 @@ class CallService:
                 SubElement(response,"Play").text=self.media_url(record,"waiting")
             record.hops+=1
             SubElement(response,"Pause",length="8" if record.trial else "2")
-            SubElement(response,"Redirect",method="POST").text=self.base()+f"/twilio/next/{record.id}"
+            SubElement(response,"Redirect",method="POST").text=self.webhook_url(record,f"/twilio/next/{record.id}")
         else:
             if c.turn in record.audio:
                 SubElement(response,"Play").text=self.media_url(record,c.turn)
@@ -267,13 +272,13 @@ class CallService:
                     record.hops+=1
                     SubElement(response,"Gather",input="speech",language="hi-IN" if c.tts_language=="hi-en" else c.tts_language,
                         speechTimeout="3",timeout="8",actionOnEmptyResult="true",method="POST",
-                        action=self.base()+f"/twilio/gathered/{record.id}/{turn}")
+                        action=self.webhook_url(record,f"/twilio/gathered/{record.id}/{turn}"))
                     return tostring(response,encoding="unicode")
                 SubElement(response,"Record",action=self.base()+f"/twilio/recorded/{record.id}/{turn}",
                     method="POST",maxLength="25",timeout="3",playBeep="true",finishOnKey="#",
                     recordingStatusCallback=self.base()+f"/twilio/ready/{record.id}/{turn}",
                     recordingStatusCallbackMethod="POST",recordingStatusCallbackEvent="completed absent")
-                SubElement(response,"Redirect",method="POST").text=self.base()+f"/twilio/next/{record.id}"
+                SubElement(response,"Redirect",method="POST").text=self.webhook_url(record,f"/twilio/next/{record.id}")
         return tostring(response,encoding="unicode")
 
     async def gathered(self,record,turn,answer,confidence=None):

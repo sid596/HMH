@@ -288,3 +288,23 @@ class RealSdkTrialTransportTests(unittest.IsolatedAsyncioTestCase):
             data=transport.request.call_args.kwargs['data']
             self.assertEqual(set(data),{'To','Url','StatusCallback'})
             self.assertNotIn('From',data)
+
+
+class TrialCallbackAuthenticationTests(ServerTests):
+    def test_unsigned_trial_callback_requires_expiring_capability_and_expected_call(self):
+        with patch.dict(os.environ,{'PHONE_STT_MODE':'gather'}):
+            service=self.server.service
+            record,_=service.create(pack(),'trial_auth_'+'x'*20)
+            record.trial=True;record.sid='CA'+'d'*32
+            record.audio[record.conversation.turn]=b'RIFF_open'
+            path='/twilio/answer/'+record.id
+            form={'AccountSid':ENV['TWILIO_ACCOUNT_SID'],'CallSid':record.sid}
+            self.assertEqual(self.client.post(path,data=form).status_code,403)
+            self.assertEqual(self.client.post(path+'?trial_token=wrong',data=form).status_code,403)
+            url=path+'?trial_token='+record.webhook_token
+            self.assertEqual(self.client.post(url,data=dict(form,CallSid='CA'+'e'*32)).status_code,403)
+            response=self.client.post(url,data=form)
+            self.assertEqual(response.status_code,200)
+            self.assertIn('trial_token=',fromstring(response.text).find('Gather').attrib['action'])
+            record.created-=1801
+            self.assertEqual(self.client.post(url,data=form).status_code,403)
