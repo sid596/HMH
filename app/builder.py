@@ -48,7 +48,13 @@ def render_builder(root):
                 st.info("Choose a PDF to extract page text and generate a topic library.")
                 return
             try:
-                document = extract_document(uploaded.getvalue(), uploaded.name)
+                pdf_content=uploaded.getvalue()
+                pdf_key=__import__("hashlib").sha256(pdf_content).hexdigest()
+                cached_doc=st.session_state.get("extracted_pdf")
+                if not cached_doc or cached_doc[0]!=pdf_key:
+                    cached_doc=(pdf_key,extract_document(pdf_content,uploaded.name))
+                    st.session_state.extracted_pdf=cached_doc
+                document={**cached_doc[1],"name":uploaded.name}
             except Exception as exc:
                 st.error(str(exc) if isinstance(exc, ValueError) else "The PDF could not be read. Try an unlocked text PDF.")
                 return

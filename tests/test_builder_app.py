@@ -26,3 +26,21 @@ class BuilderAppTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(len(app.session_state.session.pack["clauses"]), 3)
         self.assertEqual(app.session_state.session.pack["review_record"]["reviewer"], "Demo reviewer")
+
+    def test_assisted_transcript_review_can_be_applied_without_manual_json_copy(self):
+        import os
+        from unittest.mock import patch
+        raw={'sha256':'review-fixture','segments':[{'start_seconds':0,'end_seconds':2,'speaker':'unknown','text':'Do I get a refund?'}]}
+        proposal={'segments':[{'start_seconds':0,'end_seconds':2,'speaker':'customer','text':'Do I get a refund?','raw_text':'Do I get a refund?','source_segment_index':0,'review_note':'Question','role_origin':'model_suggestion'}],'raw_transcript':raw,'review_required':True}
+        with patch.dict(os.environ,{'SCORER_API_KEY':'test-key','SCORER_MODEL':'test-model'}):
+            app=AppTest.from_file(APP).run()
+            app.session_state.prior_transcript=raw
+            app.session_state.transcript_suggestions=proposal
+            app.run()
+            next(c for c in app.checkbox if c.key=='call_context_permission').check().run()
+            self.assertFalse(app.exception)
+            next(c for c in app.checkbox if c.label=='I checked these suggested edits and speaker labels against the recording.').check().run()
+            next(b for b in app.button if b.label=='Apply reviewed suggestions').click().run()
+            self.assertFalse(app.exception)
+            self.assertEqual(app.session_state.prior_transcript['segments'][0]['speaker'],'customer')
+            self.assertEqual(app.session_state.prior_transcript['raw_transcript'],raw)

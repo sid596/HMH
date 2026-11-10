@@ -75,3 +75,63 @@ class CallContextTests(unittest.TestCase):
         self.assertEqual(detect_document_language(document,caller),'en-IN')
         caller.return_value={'language':'en-IN','evidence_id':100}
         with self.assertRaises(ValueError):detect_document_language(document,caller)
+
+
+class AssistedReviewTests(unittest.TestCase):
+    def test_suggestions_split_turns_but_preserve_raw_transcript_and_chunk_times(self):
+        from engine.call_context import suggest_transcript_review
+        raw={'sha256':'fixture','segments':[{'start_seconds':0,'end_seconds':25,'speaker':'unknown','text':'Do I get a refund? Only minus 100.'}]}
+        caller=Mock(return_value={'utterances':[
+            {'segment_index':0,'source_text':'Do I get a refund?','text':'Do I get a refund?','suggested_speaker':'customer','reason':'Question, inferred role'},
+            {'segment_index':0,'source_text':'Only minus 100.','text':'Only minus 100.','suggested_speaker':'agent','reason':'Response, inferred role'}]})
+        result=suggest_transcript_review(raw,caller)
+        self.assertTrue(result['review_required'])
+        self.assertEqual(result['raw_transcript'],raw)
+        self.assertEqual(raw['segments'][0]['speaker'],'unknown')
+        self.assertEqual([s['speaker'] for s in result['segments']],['customer','agent'])
+        self.assertEqual(result['segments'][1]['start_seconds'],0)
+
+    def test_review_rejects_invented_source_changed_numbers_or_lost_negation(self):
+        from engine.call_context import suggest_transcript_review
+        raw={'segments':[{'start_seconds':0,'end_seconds':25,'speaker':'unknown','text':'No refund after 15 days.'}]}
+        for source,text in [('Invented words','Invented words'),('No refund after 15 days.','No refund after 30 days.'),('No refund after 15 days.','Refund after 15 days.')]:
+            caller=Mock(return_value={'utterances':[{'segment_index':0,'source_text':source,'text':text,'suggested_speaker':'agent','reason':'test'}]})
+            with self.assertRaises(ValueError):suggest_transcript_review(raw,caller)
+
+    def test_review_rejects_omitted_raw_words(self):
+        from engine.call_context import suggest_transcript_review
+        raw={'segments':[{'start_seconds':0,'end_seconds':25,'speaker':'unknown','text':'Wait. No refund.'}]}
+        caller=Mock(return_value={'utterances':[{'segment_index':0,'source_text':'No refund.','text':'No refund.','suggested_speaker':'agent','reason':'test'}]})
+        with self.assertRaisesRegex(ValueError,'omitted or duplicated'):suggest_transcript_review(raw,caller)
+
+class ParallelTranscriptionTests(unittest.TestCase):
+    def test_clip_requests_overlap_and_repeated_results_are_reused(self):
+        from threading import Barrier
+        barrier=Barrier(3)
+        def stt(audio,language):
+            barrier.wait(timeout=5)
+            return {'transcript':'Recognized words'}
+        caller=Mock(side_effect=stt)
+        cache={}
+        result=transcribe_recording(wav(51),caller,language='en-IN',cache=cache)
+        self.assertEqual([s['start_seconds'] for s in result['segments']],[0,25,50])
+        self.assertEqual(caller.call_count,3)
+        again=transcribe_recording(wav(51),caller,language='en-IN',cache=cache)
+        self.assertEqual(caller.call_count,3)
+        self.assertEqual(again['performance']['reused_clips'],3)
+
+
+class QuietBoundaryTests(unittest.TestCase):
+    def test_clipping_prefers_silence_without_losing_frames(self):
+        samples=np.full(16000*32,1000,dtype='<i2')
+        samples[16000*24:16000*24+8000]=0
+        buffer=io.BytesIO()
+        with wave.open(buffer,'wb') as w:
+            w.setnchannels(1);w.setsampwidth(2);w.setframerate(16000);w.writeframes(samples.tobytes())
+        clips=wav_segments(buffer.getvalue())
+        self.assertAlmostEqual(clips[0]['end_seconds'],24.5,places=1)
+        self.assertEqual(clips[1]['start_seconds'],clips[0]['end_seconds'])
+        frames=0
+        for c in clips:
+            with wave.open(io.BytesIO(c['audio'])) as w:frames+=w.getnframes()
+        self.assertEqual(frames,len(samples))
