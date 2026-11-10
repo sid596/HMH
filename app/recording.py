@@ -4,6 +4,7 @@ import json
 import httpx
 import streamlit as st
 from engine.call_context import sort_from_recording
+from engine.pack_builder import direct_context_ids
 from engine.provider_errors import ModelRequestError
 from voice.gnani import transcribe
 
@@ -36,10 +37,11 @@ def recording_panel(catalog):
                 st.error(f'Recording analysis stopped ({type(exc).__name__}). The previous library was retained.')
         context=catalog.get('call_context')
         if not context:return
-        direct={n['topic_id'] for n in context['notes'] if n['kind']!='mentioned'}
-        related={r['topic_id'] for r in context.get('related_topics',[])}-direct
+        direct=direct_context_ids(catalog)
+        related={r['topic_id'] for r in context.get('related_topics',[]) if r.get('anchor_topic_id') in direct}-direct
         transcript=context['transcript']
         st.success(f'Topics sorted: {len(direct)} direct concerns · {len(related)} related topics.')
+        if not direct:st.caption('No unresolved call concerns identified. Topics use document-importance ranking; this is not proof of full understanding.')
         if direct and not related:
             st.caption('No additional close matches were identified; this concern may already be grouped in one topic.')
         with st.expander('Analysis details',expanded=False):
@@ -48,6 +50,7 @@ def recording_panel(catalog):
             st.dataframe([{'speaker':s['speaker'],'text':s['text']} for s in labelled],hide_index=True,width="stretch")
             excluded=len(transcript.get('excluded_unknown_segments',[]))
             if excluded:st.caption(f'{excluded} unknown-speaker turns were removed from the working transcript and prioritisation.')
+            if context.get('relationship_warnings'):st.caption(f"Ignored {len(context['relationship_warnings'])} unsupported related-topic suggestions; valid direct evidence was retained.")
             for note in context['notes']:
                 st.write(f"**{note['topic_id']} · {note['kind'].replace('_',' ')}**")
                 st.write(note['observation'])

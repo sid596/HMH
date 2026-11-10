@@ -282,13 +282,26 @@ def detect_document_language(document, caller=topic_model_json):
     return language
 
 
+def is_priority_note(note):
+    signal=note.get("priority_signal")
+    if signal in {"resolved","none"}:return False
+    if note.get("kind") in {"confusion","customer_question"}:return True
+    # A routine agent explanation is not itself evidence of confusion.
+    return note.get("kind")=="agent_claim" and signal=="unresolved"
+
+
+def direct_context_ids(catalog):
+    return {n["topic_id"] for n in catalog.get("call_context",{}).get("notes",[]) if is_priority_note(n)}
+
+
 def ranked_topics(catalog):
-    context_ids = {n["topic_id"] for n in catalog.get("call_context",{}).get("notes",[]) if n["kind"] != "mentioned"}
-    related_ids={r["topic_id"] for r in catalog.get("call_context",{}).get("related_topics",[])}
-    return sorted(catalog["topics"], key=lambda t: (
-                  0 if t["id"] in context_ids else 1 if t["id"] in related_ids else 2,
-                  not t["required"], t["risk"] != "high", -t.get("priority_score",75 if t["risk"]=="high" else 25),
-                  min(s["page"] for s in t["sources"]), t["id"]))
+    context_ids=direct_context_ids(catalog)
+    related_ids={r["topic_id"] for r in catalog.get("call_context",{}).get("related_topics",[]) if r.get("anchor_topic_id") in context_ids}
+    return sorted(catalog["topics"],key=lambda t:(
+        0 if t["id"] in context_ids else 1 if t["id"] in related_ids else 2,
+        t["risk"]!="high",-t.get("priority_score",75 if t["risk"]=="high" else 25),
+        min(s["page"] for s in t["sources"]),t["id"]))
+
 
 def generate_catalog(document, language, progress=None, caller=None, *, cache=None, max_workers=None):
     started = perf_counter()
@@ -403,7 +416,7 @@ def sample_catalog(language):
         topic = deepcopy(clause)
         topic.update(category=categories[n-1], summary=clause["explain"], risk="high",
                      risk_reason="Financial obligation or an important product limitation.",
-                     required=clause["id"] in {"contribution", "returns"},
+                     required=False,
                      sources=[{"page": n, "quote": quote}])
         topics.append(topic)
     doc = {"name": "Udaan fictional product · sample text", "pages": pages, "synthetic": True,
@@ -423,8 +436,6 @@ def compile_pack(catalog, selected, reviewer, reasons=None):
     known = {t["id"] for t in topics}
     if not selected or not set(selected) <= known:
         raise TopicValidationError("Select at least one valid topic")
-    if any(t["required"] and t["id"] not in selected for t in topics):
-        raise TopicValidationError("Required topics cannot be omitted")
     if unresolved_issues(catalog["unresolved"]):
         raise TopicValidationError("Resolve document questions before compiling a runnable pack")
     exclusions = []

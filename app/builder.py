@@ -5,7 +5,7 @@ from pathlib import Path
 import streamlit as st
 from engine.provider_errors import ModelRequestError
 from engine.localization import PROFILES
-from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack, ranked_topics, MAX_QUESTIONS, TopicValidationError, strict_topic_output_enabled, TOPIC_PROMPT_VERSION, unresolved_issues
+from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack, ranked_topics, MAX_QUESTIONS, TopicValidationError, strict_topic_output_enabled, TOPIC_PROMPT_VERSION, unresolved_issues, direct_context_ids
 from app.recording import recording_panel
 from app.outbound import render_outbound
 
@@ -39,7 +39,7 @@ def render_builder(root):
             if st.session_state.get("catalog_scope") != scope:
                 st.session_state.catalog = sample_catalog(language)
                 st.session_state.catalog_scope = scope
-            st.caption("PREWRITTEN EXAMPLE · Four fictional topics, no document upload or AI generation. Two example core topics are required.")
+            st.caption("PREWRITTEN EXAMPLE · Four fictional topics, no document upload or AI generation. No topics are mandatory; call evidence drives priority, with document importance as fallback.")
         else:
             uploaded = st.file_uploader("Upload a fictional policy or product PDF", type=["pdf"], max_upload_size=20)
             st.caption("Text PDFs up to 20 MB / 300 pages. Scanned pages need OCR before upload. Extracted text is sent to your configured text-model provider only when you generate topics.")
@@ -105,13 +105,12 @@ def render_builder(root):
     state_key = catalog["document"]["sha256"][:12] + language + catalog["generated_at"]
     selection_key = "selected:" + state_key
     if selection_key not in st.session_state:
-        st.session_state[selection_key] = {t["id"] for t in catalog["topics"] if t["required"]}
+        st.session_state[selection_key] = set()
     selected = st.session_state[selection_key]
-    selected.update(t["id"] for t in catalog["topics"] if t["required"])
     topics = ranked_topics(catalog)
     call_context=catalog.get("call_context",{})
-    direct_ids={n["topic_id"] for n in call_context.get("notes",[]) if n["kind"]!="mentioned"}
-    related=call_context.get("related_topics",[])
+    direct_ids=direct_context_ids(catalog)
+    related=[r for r in call_context.get("related_topics",[]) if r.get("anchor_topic_id") in direct_ids]
     by_id={t["id"]:t for t in topics}
     omitted_context=(direct_ids|{r["topic_id"] for r in related})-selected
     if omitted_context:
@@ -136,13 +135,13 @@ def render_builder(root):
             with st.container(border=True):
                 title, action = st.columns([5,1])
                 with title:
-                    status = "REQUIRED CORE" if topic["required"] else "SUGGESTED IMPORTANT" if topic["risk"] == "high" else "OPTIONAL"
+                    status = "CALL EVIDENCE PRIORITY" if topic["id"] in direct_ids else "RELATED CALL PRIORITY" if any(r["topic_id"]==topic["id"] for r in related) else "DOCUMENT IMPORTANT" if topic["risk"] == "high" else "OPTIONAL"
                     st.caption(f"{topic['category'].upper()} · {status}")
                     st.markdown("**" + topic["title"] + "**")
                 with action:
                     included = topic["id"] in selected
                     if st.button("✓" if included else "+", key="add:" + state_key + topic["id"],
-                                 disabled=topic["required"] or (not included and len(selected)>=MAX_QUESTIONS), help="Required core topic" if topic["required"] else "Remove from pack" if included else "Add to pack", use_container_width=True):
+                                 disabled=not included and len(selected)>=MAX_QUESTIONS, help="Remove from pack" if included else "Add to pack", use_container_width=True):
                         if included:
                             selected.remove(topic["id"])
                         else:
@@ -178,7 +177,7 @@ def render_builder(root):
             st.info("No topics match these filters. Your pack selection is unchanged.")
     with preview:
         st.subheader("Your verification pack")
-        st.caption(f"{len(selected)} / {MAX_QUESTIONS} questions selected. Direct call concerns first, related topics next, then other topics. Required topics remain mandatory.")
+        st.caption(f"{len(selected)} / {MAX_QUESTIONS} questions selected. Direct call concerns first, related topics next, then other topics. Document importance is the fallback when no unresolved call concerns are identified.")
         st.caption(f"{PROFILES[language]['label']} · {PROFILES[language]['voice']} · selected topics only")
         if not selected:
             st.info("Add a topic with + to begin.")

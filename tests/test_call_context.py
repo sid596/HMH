@@ -298,8 +298,34 @@ class CallRelevanceBeforeRequiredTests(unittest.TestCase):
         catalog['call_context']={'notes':[{'topic_id':'cancellation','kind':'customer_question'}],
             'related_topics':[{'topic_id':'early_exit','anchor_topic_id':'cancellation'}]}
         self.assertEqual([t['id'] for t in ranked_topics(catalog)],['cancellation','early_exit','contribution','returns'])
-        self.assertTrue(next(t for t in catalog['topics'] if t['id']=='contribution')['required'])
-        with self.assertRaisesRegex(ValueError,'Required topics'):
-            compile_pack(catalog,{'cancellation','early_exit'},'Reviewer')
+        self.assertFalse(next(t for t in catalog['topics'] if t['id']=='contribution')['required'])
+        focused=compile_pack(catalog,{'cancellation','early_exit'},'Reviewer')
+        self.assertEqual(len(focused['clauses']),2)
         saved=compile_pack(catalog,{t['id'] for t in catalog['topics']},'Reviewer')
         self.assertEqual([c['id'] for c in saved['clauses']],['cancellation','early_exit','contribution','returns'])
+
+
+class EvidenceFirstFallbackTests(unittest.TestCase):
+    def test_resolved_confusion_and_routine_agent_explanations_use_document_ranking(self):
+        catalog=sample_catalog('en-IN')
+        baseline=[t['id'] for t in ranked_topics(catalog)]
+        catalog['call_context']={'notes':[
+            {'topic_id':'cancellation','kind':'confusion','priority_signal':'resolved'},
+            {'topic_id':'early_exit','kind':'agent_claim','priority_signal':'none'}],
+            'related_topics':[{'topic_id':'early_exit','anchor_topic_id':'cancellation'}]}
+        self.assertEqual([t['id'] for t in ranked_topics(catalog)],baseline)
+
+    def test_unresolved_customer_issue_changes_priority_and_nothing_is_mandatory(self):
+        catalog=sample_catalog('en-IN')
+        catalog['call_context']={'notes':[{'topic_id':'cancellation','kind':'confusion','priority_signal':'unresolved'}]}
+        self.assertEqual(ranked_topics(catalog)[0]['id'],'cancellation')
+        self.assertFalse(any(t['required'] for t in catalog['topics']))
+
+    def test_bad_optional_relation_does_not_discard_direct_evidence(self):
+        caller=Mock(return_value={'notes':[{'topic_id':'cancellation','evidence_id':'evidence_0000','kind':'confusion','priority_signal':'unresolved','observation':'Needs clarification'}],
+            'related_topics':[{'topic_id':'early_exit','anchor_topic_id':'invented','relationship':'condition','topic_fact_indices':[0],'anchor_fact_indices':[0],'reason':'Bad link'}],
+            'preferred_language':None,'preference_evidence':None})
+        result=analyse_context(sample_catalog('en-IN'),{'segments':[{'speaker':'customer','text':'I am confused about the cancellation window.'}]},caller)
+        self.assertEqual(len(result['call_context']['notes']),1)
+        self.assertEqual(result['call_context']['related_topics'],[])
+        self.assertEqual(len(result['call_context']['relationship_warnings']),1)

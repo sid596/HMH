@@ -4,10 +4,11 @@ from unittest.mock import Mock
 from engine.pack_builder import sample_catalog, compile_pack, generate_catalog, validate_topics, chunks
 
 class PackBuilderTests(unittest.TestCase):
-    def test_required_core_cannot_be_omitted(self):
+    def test_example_topics_are_not_mandatory(self):
         catalog = sample_catalog("en-IN")
-        with self.assertRaisesRegex(ValueError, "Required"):
-            compile_pack(catalog, {"contribution"}, "Demo reviewer", {})
+        pack=compile_pack(catalog, {"contribution"}, "Demo reviewer", {})
+        self.assertEqual([c["id"] for c in pack["clauses"]],["contribution"])
+        self.assertFalse(any(t["required"] for t in catalog["topics"]))
 
     def test_exclusion_needs_no_reason_and_optional_reason_is_preserved(self):
         catalog = sample_catalog("mr-IN")
