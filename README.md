@@ -37,7 +37,7 @@ The browser microphone is for synthetic scripted speech only. Live flow: Timbre 
 
 ## Policy and review
 
-Four critical clauses, two retries per clause. The second retry uses a simpler explanation. All required facts must be present without contradiction. A provisional self-reported scorer confidence below 0.85 routes to human review immediately. This threshold is uncalibrated. Partial understanding never passes a critical clause.
+Four critical clauses, two retries per clause. The second retry uses a simpler explanation. All required facts must be present without contradiction. Scorer confidence is retained as diagnostic metadata only and never controls progression. Every selected topic requires all required facts without contradiction; partial understanding retries, even for topics labelled noncritical.
 
 `packs/fictional_savings_v1.json` is a DRAFT. Both teammates should review every invented term, fact, misconception and Hindi–English script. Record reviewer and timestamp and increment the version only after review; the app never approves it itself. Draft sessions end in `demo_checks_passed`, never a legal-consent claim.
 

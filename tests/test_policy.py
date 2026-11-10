@@ -11,10 +11,33 @@ class PolicyTests(unittest.TestCase):
         _, e = fixture_evidence(PACK["clauses"][0], "partial")
         self.assertEqual([decide(e, True, n) for n in (1,2,3)], ["retry", "retry", "escalate"])
 
-    def test_low_confidence_understood_escalates(self):
+    def test_low_confidence_understood_passes_based_on_complete_facts(self):
         raw = dict(facts_present=[0,1], facts_missing=[], misconception_detected=False,
                    verdict="understood", confidence=0.5, rationale="Uncertain translation")
-        self.assertEqual(decide(Evidence.validate(raw, PACK["clauses"][0]), True, 1), "escalate")
+        self.assertEqual(decide(Evidence.validate(raw, PACK["clauses"][0]), True, 1), "pass")
+
+    def test_confidence_never_changes_wrong_answer_retry_budget(self):
+        from dataclasses import replace
+        _, evidence=fixture_evidence(PACK["clauses"][0],"misconception")
+        for confidence in (0.0,0.5,0.78,0.99,1.0):
+            e=replace(evidence,confidence=confidence)
+            self.assertEqual([decide(e,True,n) for n in (1,2,3)],["retry","retry","escalate"])
+
+    def test_partial_noncritical_topic_does_not_advance(self):
+        _, e=fixture_evidence(PACK["clauses"][0],"partial")
+        self.assertEqual(decide(e,False,1),"retry")
+
+    def test_low_confidence_wrong_then_correct_advances_without_ending_session(self):
+        from dataclasses import replace
+        with tempfile.TemporaryDirectory() as d:
+            session=Session(PACK,d,"live")
+            answer,e=fixture_evidence(session.clause,"misconception")
+            self.assertEqual(session.submit(answer,replace(e,confidence=0.78)),"retry")
+            self.assertEqual(session.status,"active")
+            answer,e=fixture_evidence(session.clause,"attentive")
+            self.assertEqual(session.submit(answer,replace(e,confidence=0.1)),"pass")
+            self.assertEqual(session.index,1)
+            self.assertEqual(session.attempt,0)
 
     def test_inconsistent_model_output_rejected(self):
         raw = dict(facts_present=[0], facts_missing=[1], misconception_detected=False,

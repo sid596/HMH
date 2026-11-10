@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 import uuid
 
 VERDICTS = {"understood", "partial", "misunderstood", "no_evidence"}
-MIN_CONFIDENCE = 0.85
 MAX_RETRIES = 2
 
 
@@ -67,11 +66,7 @@ class Evidence:
 
 
 def decide(evidence, critical, attempt):
-    if evidence.confidence < MIN_CONFIDENCE:
-        return "escalate"
     if evidence.verdict == "understood":
-        return "pass"
-    if not critical and evidence.verdict == "partial":
         return "pass"
     return "retry" if attempt <= MAX_RETRIES else "escalate"
 

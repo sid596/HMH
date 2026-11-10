@@ -53,7 +53,7 @@ with st.sidebar:
         st.rerun()
     with st.expander("Rubric and policy"):
         st.json(pack)
-        st.write("Confidence gate: 0.85 (provisional, uncalibrated). Two retries. Low confidence or exhausted retries → human review.")
+        st.write("All required facts must be conveyed without contradiction. Two retries per topic; scorer confidence does not control progression. Exhausted retries or processing failures require human review.")
 
 render_outbound(pack)
 st.warning("Draft rubric and translations: native-speaker review pending. All amounts and terms are invented. This demo cannot certify legal consent or prove understanding.")
