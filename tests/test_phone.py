@@ -229,3 +229,12 @@ class TrialPackLimitTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'at most 3 topics'):
                 service.create(large,'oversized_'+'x'*20)
             client.calls.create.assert_not_called()
+
+class ProviderDiagnosticTests(unittest.TestCase):
+    def test_unmapped_error_keeps_numeric_code_without_provider_message(self):
+        from telephony.service import provider_error
+        error=RuntimeError('private response must not be displayed')
+        error.code=21205
+        message=provider_error(error)
+        self.assertIn('21205',message)
+        self.assertNotIn('private response',message)

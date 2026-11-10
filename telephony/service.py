@@ -88,7 +88,11 @@ def provider_error(exc):
              21210:"Twilio rejected the caller number. Use a number this account may call from.",
              21608:"The trial destination must be verified in Twilio.",21215:"Check Twilio geographic calling permissions for the destination.",
              21214:"This destination is not permitted for this account."}
-    return actions.get(code,"Call setup or processing failed ("+type(exc).__name__+"). Check the provider console before retrying; a timed-out call request may still have been accepted.")
+    if code in actions:
+        return actions[code]+f" (Twilio {code})"
+    if isinstance(code,int) or (isinstance(code,str) and code.isdigit()):
+        return f"Twilio rejected the request (error {code}). See https://www.twilio.com/docs/api/errors/{code}. Check provider logs before retrying."
+    return "Call setup or processing failed ("+type(exc).__name__+"). Check the provider console before retrying; a timed-out call request may still have been accepted."
 
 
 @dataclass
@@ -190,7 +194,8 @@ class CallService:
         except Exception as exc:
             record.phase="failed"
             record.error=provider_error(exc)
-            record.conversation.session.audit.append("outbound_failed",error_type=type(exc).__name__)
+            record.conversation.session.status="human_review"
+            record.conversation.session.audit.append("outbound_failed",error_type=type(exc).__name__,provider_code=getattr(exc,"code",None))
 
     def media_url(self,record,key):
         return self.base()+f"/media/{record.id}/{record.media_token}/{quote(key,safe=':')}"
