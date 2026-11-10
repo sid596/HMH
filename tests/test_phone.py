@@ -260,9 +260,31 @@ class TrialCreationParametersTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
             client=Mock()
             client.api.accounts.return_value.fetch.return_value=SimpleNamespace(type='Trial')
-            client.calls.create.return_value=SimpleNamespace(sid='CA'+'b'*32)
+            from twilio.http.response import Response
+            import json
+            client.request.return_value=Response(201,json.dumps({'sid':'CA'+'b'*32}))
             service=CallService(d,client_factory=lambda:client,synthesizer=Mock(return_value=b'RIFF_audio'))
             record,_=service.create(pack(),'minimal_'+'x'*20)
             await service.prepare_and_dial(record)
-            self.assertEqual(set(client.calls.create.call_args.kwargs),{'to','url','status_callback'})
+            self.assertEqual(set(client.request.call_args.kwargs['data']),{'To','Url','StatusCallback'})
+            client.calls.create.assert_not_called()
             self.assertEqual(record.phase,'dialing')
+
+
+class RealSdkTrialTransportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_real_sdk_transport_does_not_require_from(self):
+        import json
+        from twilio.rest import Client
+        from twilio.http.response import Response
+        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
+            transport=Mock()
+            transport.request.return_value=Response(201,json.dumps({'sid':'CA'+'c'*32}))
+            client=Client(ENV['TWILIO_ACCOUNT_SID'],ENV['TWILIO_AUTH_TOKEN'],http_client=transport)
+            service=CallService(d,client_factory=lambda:client,synthesizer=Mock(return_value=b'RIFF_audio'))
+            with patch.object(service,'check_account',return_value='Trial'):
+                record,_=service.create(pack(),'real_sdk_'+'x'*20)
+            await service.prepare_and_dial(record)
+            self.assertEqual(record.phase,'dialing')
+            data=transport.request.call_args.kwargs['data']
+            self.assertEqual(set(data),{'To','Url','StatusCallback'})
+            self.assertNotIn('From',data)

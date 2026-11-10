@@ -202,7 +202,26 @@ class CallService:
                 parameters.update(from_=os.environ["TWILIO_FROM_NUMBER"],method="POST",
                     status_callback_event=["initiated","ringing","answered","completed"],
                     timeout=30,time_limit=900)
-            call=await asyncio.to_thread(self.client().calls.create,**parameters)
+            if record.trial:
+                # The generated SDK requires From even though the new trial API
+                # chooses its own shared caller ID. Use its authenticated HTTP
+                # transport without adding that disallowed field.
+                def create_trial():
+                    from twilio.base.version import Version
+                    from types import SimpleNamespace
+                    response=self.client().request("POST",
+                        "https://api.twilio.com/2010-04-01/Accounts/"+os.environ["TWILIO_ACCOUNT_SID"]+"/Calls.json",
+                        data={"To":parameters["to"],"Url":parameters["url"],"StatusCallback":parameters["status_callback"]})
+                    if not 200<=response.status_code<300:
+                        raise Version.exception("POST","/Calls.json",response,"Unable to create record")
+                    import json
+                    sid=json.loads(response.text).get("sid")
+                    if not isinstance(sid,str) or not re.fullmatch(r"CA[a-fA-F0-9]{32}",sid):
+                        raise ValueError("Twilio returned no valid call identifier; check provider logs before retrying")
+                    return SimpleNamespace(sid=sid)
+                call=await asyncio.to_thread(create_trial)
+            else:
+                call=await asyncio.to_thread(self.client().calls.create,**parameters)
             record.sid=call.sid
             c.session.audit.append("outbound_call_created",call_sid=call.sid,
                                    destination="configured_test_phone",question_limit=15,answer_recording=record.stt_mode=="prisma_record",stt_provider=record.stt_mode)
