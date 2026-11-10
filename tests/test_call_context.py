@@ -249,3 +249,44 @@ class MultilingualEvidenceTests(unittest.TestCase):
             caller=Mock(return_value={'notes':[{'topic_id':'cancellation','evidence_id':'evidence_0000','kind':'customer_question','observation':'Clarify deadline'}],'preferred_language':None,'preference_evidence':None})
             result=analyse_context(sample_catalog('en-IN'),{'segments':[{'speaker':'customer','text':text}]},caller)
             self.assertEqual(result['call_context']['notes'][0]['quote'],text)
+
+class OneClickRecordingPipelineTests(unittest.TestCase):
+    def responses(self):
+        return [
+            {'utterances':[
+                {'segment_index':0,'source_text':'Hello.','text':'Hello.','suggested_speaker':'unknown','reason':'Chatter'},
+                {'segment_index':0,'source_text':'Is cancellation free?','text':'Is cancellation free?','suggested_speaker':'customer','reason':'Question'},
+                {'segment_index':0,'source_text':'No, there is a fee.','text':'No, there is a fee.','suggested_speaker':'agent','reason':'Answer'}]},
+            {'notes':[{'topic_id':'cancellation','evidence_id':'evidence_0000','kind':'customer_question','observation':'Clarify refund deduction'}],
+             'related_topics':[],'preferred_language':None,'preference_evidence':None}]
+
+    def test_one_action_runs_all_stages_excludes_unknowns_and_reuses_results(self):
+        from engine.call_context import sort_from_recording
+        stt=Mock(return_value={'transcript':'Hello. Is cancellation free? No, there is a fee.'})
+        caller=Mock(side_effect=self.responses());cache={}
+        catalog=sample_catalog('en-IN')
+        result=sort_from_recording(catalog,wav(),stt,caller,cache)
+        self.assertEqual(stt.call_count,1)
+        self.assertEqual(caller.call_count,2)
+        transcript=result['call_context']['transcript']
+        self.assertEqual([s['speaker'] for s in transcript['segments']],['customer','agent'])
+        self.assertEqual(transcript['excluded_unknown_segments'][0]['text'],'Hello.')
+        self.assertEqual(transcript['speaker_attribution'],'model_inferred_unverified')
+        self.assertEqual(result['call_context']['notes'][0]['speaker_attribution'],'model_inferred_unverified')
+        self.assertEqual(transcript['raw_transcript']['segments'][0]['speaker'],'unknown')
+        self.assertNotIn('call_context',catalog)
+        again=sort_from_recording(catalog,wav(),stt,caller,cache)
+        self.assertEqual(caller.call_count,2)
+        self.assertEqual(stt.call_count,1)
+        self.assertEqual(again['call_context'],result['call_context'])
+
+    def test_explicit_retry_resumes_after_context_failure_without_retranscription(self):
+        from engine.call_context import sort_from_recording
+        stt=Mock(return_value={'transcript':'Hello. Is cancellation free? No, there is a fee.'})
+        cleanup,context=self.responses()
+        caller=Mock(side_effect=[cleanup,RuntimeError('context unavailable'),context]);cache={}
+        with self.assertRaises(RuntimeError):sort_from_recording(sample_catalog('en-IN'),wav(),stt,caller,cache)
+        result=sort_from_recording(sample_catalog('en-IN'),wav(),stt,caller,cache)
+        self.assertEqual(stt.call_count,1)
+        self.assertEqual(caller.call_count,3)
+        self.assertEqual(len(result['call_context']['notes']),1)

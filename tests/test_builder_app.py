@@ -27,25 +27,26 @@ class BuilderAppTests(unittest.TestCase):
         self.assertEqual(len(app.session_state.session.pack["clauses"]), 3)
         self.assertEqual(app.session_state.session.pack["review_record"]["reviewer"], "Demo reviewer")
 
-    def test_assisted_transcript_review_can_be_applied_without_manual_json_copy(self):
-        import os
-        from unittest.mock import patch
-        raw={'sha256':'review-fixture','segments':[{'start_seconds':0,'end_seconds':2,'speaker':'unknown','text':'Do I get a refund?'}]}
-        proposal={'segments':[{'start_seconds':0,'end_seconds':2,'speaker':'customer','text':'Do I get a refund?','raw_text':'Do I get a refund?','source_segment_index':0,'review_note':'Question','role_origin':'model_suggestion'}],'raw_transcript':raw,'review_required':True}
-        with patch.dict(os.environ,{'SCORER_API_KEY':'test-key','SCORER_MODEL':'test-model'}):
-            app=AppTest.from_file(APP).run()
-            app.session_state.prior_transcript=raw
-            app.session_state.transcript_suggestions=proposal
-            app.run()
-            self.assertFalse(app.exception)
-            next(c for c in app.checkbox if c.label=='I checked these suggested edits and speaker labels against the recording.').check().run()
-            next(b for b in app.button if b.label=='Apply reviewed suggestions').click().run()
-            self.assertFalse(app.exception)
-            self.assertEqual(app.session_state.prior_transcript['segments'][0]['speaker'],'customer')
-            self.assertEqual(app.session_state.prior_transcript['raw_transcript'],raw)
+    def test_recording_has_one_sort_action_and_no_manual_intermediate_steps(self):
+        app=AppTest.from_file(APP).run()
+        self.assertFalse(app.exception)
+        actions={b.label for b in app.button}
+        self.assertIn('Sort topics using this call',actions)
+        self.assertTrue({'Transcribe previous call','Suggest speaker turns and transcript cleanup','Apply reviewed suggestions'}.isdisjoint(actions))
+        self.assertFalse(any('suggested edits' in c.label for c in app.checkbox))
 
     def test_recording_setup_controls_are_removed(self):
         app=AppTest.from_file(APP).run()
         labels={s.label for s in app.selectbox}
         self.assertTrue({'Speaker channels','Recording language','Concurrent transcription requests'}.isdisjoint(labels))
         self.assertFalse(any(c.key=='call_context_permission' for c in app.checkbox))
+
+    def test_unknown_rows_are_hidden_from_working_transcript_details(self):
+        app=AppTest.from_file(APP).run()
+        catalog=app.session_state.catalog
+        catalog['call_context']={'notes':[],'related_topics':[], 'transcript':{'segments':[
+            {'speaker':'unknown','text':'Opening chatter'}, {'speaker':'customer','text':'What refund applies?'}]}}
+        app.session_state.catalog=catalog
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.dataframe[0].value['speaker'].tolist(),['customer'])
