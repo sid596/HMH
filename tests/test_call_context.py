@@ -211,7 +211,7 @@ class RelatedTopicPriorityTests(unittest.TestCase):
         return {'topic_id':'early_exit','anchor_topic_id':'cancellation','relationship':'condition',
                 'topic_fact_indices':[0],'anchor_fact_indices':[0],'reason':'Both concern leaving the product and the applicable conditions.'}
 
-    def test_direct_then_related_then_unaffected_within_risk_tier(self):
+    def test_direct_then_related_then_unaffected_across_risk_tiers(self):
         from engine.call_context import validate_related_topics
         catalog=sample_catalog('en-IN')
         for topic in catalog['topics']:topic['required']=False
@@ -223,7 +223,7 @@ class RelatedTopicPriorityTests(unittest.TestCase):
         saved=compile_pack(catalog,{t['id'] for t in catalog['topics']},'Reviewer')
         self.assertEqual([c['id'] for c in saved['clauses']],ordered)
         next(t for t in catalog['topics'] if t['id']=='early_exit')['risk']='standard'
-        self.assertLess([t['id'] for t in ranked_topics(catalog)].index('returns'),[t['id'] for t in ranked_topics(catalog)].index('early_exit'))
+        self.assertLess([t['id'] for t in ranked_topics(catalog)].index('early_exit'),[t['id'] for t in ranked_topics(catalog)].index('returns'))
 
     def test_invalid_anchors_or_invented_facts_cannot_promote_topics(self):
         from engine.call_context import validate_related_topics
@@ -290,3 +290,16 @@ class OneClickRecordingPipelineTests(unittest.TestCase):
         self.assertEqual(stt.call_count,1)
         self.assertEqual(caller.call_count,3)
         self.assertEqual(len(result['call_context']['notes']),1)
+
+
+class CallRelevanceBeforeRequiredTests(unittest.TestCase):
+    def test_screenshot_case_puts_cancellation_and_related_withdrawal_first(self):
+        catalog=sample_catalog('en-IN')
+        catalog['call_context']={'notes':[{'topic_id':'cancellation','kind':'customer_question'}],
+            'related_topics':[{'topic_id':'early_exit','anchor_topic_id':'cancellation'}]}
+        self.assertEqual([t['id'] for t in ranked_topics(catalog)],['cancellation','early_exit','contribution','returns'])
+        self.assertTrue(next(t for t in catalog['topics'] if t['id']=='contribution')['required'])
+        with self.assertRaisesRegex(ValueError,'Required topics'):
+            compile_pack(catalog,{'cancellation','early_exit'},'Reviewer')
+        saved=compile_pack(catalog,{t['id'] for t in catalog['topics']},'Reviewer')
+        self.assertEqual([c['id'] for c in saved['clauses']],['cancellation','early_exit','contribution','returns'])

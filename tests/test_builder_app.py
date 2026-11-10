@@ -50,3 +50,16 @@ class BuilderAppTests(unittest.TestCase):
         app.run()
         self.assertFalse(app.exception)
         self.assertEqual(app.dataframe[0].value['speaker'].tolist(),['customer'])
+
+    def test_call_related_library_cards_precede_unrelated_required_cards(self):
+        app=AppTest.from_file(APP).run()
+        catalog=app.session_state.catalog
+        catalog['call_context']={'transcript':{'segments':[]},'preferred_language':None,
+            'notes':[{'topic_id':'cancellation','kind':'customer_question','observation':'Clarify cancellation','quote':'What is the cancellation deadline?','speaker':'customer'}],
+            'related_topics':[{'topic_id':'early_exit','anchor_topic_id':'cancellation','relationship':'condition','reason':'Leaving the product conditions'}]}
+        app.session_state.catalog=catalog
+        app.run()
+        self.assertFalse(app.exception)
+        titles=[m.value for m in app.markdown]
+        self.assertLess(titles.index('**Cancellation window**'),titles.index('**Early withdrawal**'))
+        self.assertLess(titles.index('**Early withdrawal**'),titles.index('**Monthly payment**'))

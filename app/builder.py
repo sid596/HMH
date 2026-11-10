@@ -178,7 +178,7 @@ def render_builder(root):
             st.info("No topics match these filters. Your pack selection is unchanged.")
     with preview:
         st.subheader("Your verification pack")
-        st.caption(f"{len(selected)} / {MAX_QUESTIONS} questions selected. Required core first, important topics next, optional topics last.")
+        st.caption(f"{len(selected)} / {MAX_QUESTIONS} questions selected. Direct call concerns first, related topics next, then other topics. Required topics remain mandatory.")
         st.caption(f"{PROFILES[language]['label']} · {PROFILES[language]['voice']} · selected topics only")
         if not selected:
             st.info("Add a topic with + to begin.")
