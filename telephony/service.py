@@ -28,11 +28,18 @@ RECORDING_NOTICE={"en-IN":"This synthetic test call records your answers for aut
  "kn-IN":"ಈ ಕಾಲ್ಪನಿಕ ಪರೀಕ್ಷಾ ಕರೆಯಲ್ಲಿ ನಿಮ್ಮ ಉತ್ತರಗಳನ್ನು ಧ್ವನಿಮುದ್ರಿಸಲಾಗುತ್ತದೆ. ಪ್ರತಿ ಪ್ರಶ್ನೆಯ ನಂತರ ಬೀಪ್ ಕೇಳಿದ ಮೇಲೆ ಉತ್ತರಿಸಿ. ಮುಗಿದಾಗ ಮಾತನಾಡುವುದನ್ನು ನಿಲ್ಲಿಸಿ ಅಥವಾ ಹ್ಯಾಶ್ ಬಟನ್ ಒತ್ತಿರಿ."}
 
 GATHER_NOTICE={
- "en-IN":"This is a synthetic verification call. Twilio transcribes your answers and HMH saves the transcript. Gnani Timbre provides this voice. Please answer after each question and pause when finished.",
- "hi-IN":"यह एक काल्पनिक सत्यापन कॉल है। ट्विलियो आपके जवाब को लिखित रूप में बदलता है और एचएमएच उसे सहेजता है। यह आवाज़ ज्ञानी टिम्बर की है। हर सवाल के बाद जवाब दें और पूरा होने पर रुकें।",
- "hi-en":"Yeh synthetic verification call hai. Twilio aapke answers transcribe karta hai aur HMH transcript save karta hai. Voice Gnani Timbre ki hai. Har question ke baad answer dein aur finish hone par ruk jaayein.",
- "mr-IN":"हा काल्पनिक पडताळणी कॉल आहे. ट्विलियो तुमची उत्तरे मजकुरात बदलतो आणि एचएमएच तो साठवतो. हा आवाज ज्ञानी टिम्बरचा आहे. प्रत्येक प्रश्नानंतर उत्तर द्या आणि झाल्यावर थांबा.",
- "kn-IN":"ಇದು ಕಾಲ್ಪನಿಕ ಪರಿಶೀಲನಾ ಕರೆ. ಟ್ವಿಲಿಯೊ ನಿಮ್ಮ ಉತ್ತರಗಳನ್ನು ಪಠ್ಯಕ್ಕೆ ಬದಲಿಸುತ್ತದೆ ಮತ್ತು ಎಚ್‌ಎಂಎಚ್ ಅದನ್ನು ಉಳಿಸುತ್ತದೆ. ಈ ಧ್ವನಿ ಜ್ಞಾನಿ ಟಿಂಬರ್‌ನದು. ಪ್ರತಿ ಪ್ರಶ್ನೆಯ ನಂತರ ಉತ್ತರಿಸಿ ಮತ್ತು ಮುಗಿದಾಗ ವಿರಾಮ ನೀಡಿ."
+ "en-IN":"Please answer in your own words.",
+ "hi-IN":"कृपया अपने शब्दों में जवाब दें।",
+ "hi-en":"Please apne words mein answer dein.",
+ "mr-IN":"कृपया तुमच्या शब्दांत उत्तर द्या.",
+ "kn-IN":"ದಯವಿಟ್ಟು ನಿಮ್ಮದೇ ಮಾತುಗಳಲ್ಲಿ ಉತ್ತರಿಸಿ."
+}
+PHONE_MESSAGES={
+ "en-IN":{"complete":"Thank you. Verification is complete. Goodbye.","human_review":"A team member needs to review this with you. Goodbye."},
+ "hi-IN":{"complete":"धन्यवाद। सत्यापन पूरा हुआ। नमस्ते।","human_review":"एक कर्मचारी को आपके साथ इसकी समीक्षा करनी होगी। नमस्ते।"},
+ "hi-en":{"complete":"Thank you. Verification complete hai. Goodbye.","human_review":"Ek team member aapke saath review karega. Goodbye."},
+ "mr-IN":{"complete":"धन्यवाद. पडताळणी पूर्ण झाली. नमस्कार.","human_review":"एका कर्मचाऱ्याने तुमच्यासोबत याचे पुनरावलोकन करणे आवश्यक आहे. नमस्कार."},
+ "kn-IN":{"complete":"ಧನ್ಯವಾದಗಳು. ಪರಿಶೀಲನೆ ಪೂರ್ಣಗೊಂಡಿದೆ. ನಮಸ್ಕಾರ.","human_review":"ತಂಡದ ಸದಸ್ಯರು ನಿಮ್ಮೊಂದಿಗೆ ಇದನ್ನು ಪರಿಶೀಲಿಸಬೇಕಾಗಿದೆ. ನಮಸ್ಕಾರ."}
 }
 
 def speech_mode():
@@ -183,7 +190,8 @@ class CallService:
         if account_type=="Trial" and len(pack["clauses"])>3:
             raise ValueError("Use at most 3 topics for the trial demo; Twilio limits callback hops to 10.")
         language=pack["language"]
-        conversation=Conversation(pack,self.directory,"indic-auto",language,PROFILES[language]["voice"])
+        conversation=Conversation(pack,self.directory,"indic-auto",language,PROFILES[language]["voice"],
+            include_disclosure=False,message_overrides=PHONE_MESSAGES[language])
         record=PhoneCall(request_id,conversation,stt_mode=speech_mode(),trial=account_type=="Trial")
         self.calls[request_id]=record
         return record,True
@@ -192,6 +200,7 @@ class CallService:
         try:
             c=record.conversation
             # Prepare audio BEFORE ringing the phone, so the answer webhook responds immediately.
+            c.session.audit.append("phone_spoken_configuration",include_pack_disclosure=False,message_overrides=PHONE_MESSAGES[c.tts_language])
             opening=(GATHER_NOTICE if record.stt_mode=="gather" else RECORDING_NOTICE)[c.tts_language]+" "+c.speech_text()
             record.audio[c.turn]=await asyncio.to_thread(self.synthesizer,opening,language=c.tts_language,voice=c.voice)
             record.audio["waiting"]=await asyncio.to_thread(self.synthesizer,WAITING[c.tts_language],language=c.tts_language,voice=c.voice)

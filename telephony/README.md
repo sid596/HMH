@@ -46,7 +46,7 @@ The frontend checks the protected backend `/health` endpoint. It reports missing
 
 ## How the call works
 
-The backend prepares opening audio with a truthful transcript notice before dialling. It plays Timbre audio, then Gather listens for speech in the pack language (Hinglish uses Hindi recognition). Pause for 3 seconds to finish an answer. An empty transcript ends in human review. A signed, turn-specific callback returns waiting instructions immediately, while a worker scores the transcript and prepares Timbre audio. Duplicate/stale callbacks do not rescore. Twilio recognition confidence is logged as provider metadata, not treated as customer understanding. The prototype is turn-based, without interruption support.
+The backend prepares opening audio with a short answer instruction before dialling. It plays Timbre audio, then Gather listens for speech in the pack language (Hinglish uses Hindi recognition). Pause for 3 seconds to finish an answer. An empty transcript ends in human review. A signed, turn-specific callback returns waiting instructions immediately, while a worker scores the transcript and prepares Timbre audio. Duplicate/stale callbacks do not rescore. Twilio recognition confidence is logged as provider metadata, not treated as customer understanding. The prototype is turn-based, without interruption support.
 
 The optional `prisma_record` mode retains Record/Prisma callbacks and is rejected on trial accounts. Failure, silence, processing timeout, question exhaustion or trial-hop exhaustion never counts as a pass. Call status is available through the protected API and frontend refresh button. No live call has been verified yet.
 
@@ -57,3 +57,5 @@ Call-control endpoints require a strong bearer token. Webhooks validate Twilio s
 This is a single-process prototype with in-memory call state and local audit JSONL under `data/phone/`. Restarting during a call loses routing state; use the provider console/handset to end a call if the process is unavailable. Access controls, retention, reviewer roles, durable job storage, interruption handling and production capacity need further work. Twilio stores answer recordings under your account; configure/delete them using provider retention controls. HMH does not start a separate full-call recording.
 
 The call workflow was tested with mocked provider/model/audio services, including signature checks, callback deduplication, failure-before-dial, trial rejection and question-budget exhaustion. No real outbound phone call has been verified yet.
+
+Phone calls omit the long spoken synthetic/demo disclosure and use brief closing messages. The frontend retains transcription/provider details and explicit call consent. Original pack text remains in the audit snapshot; spoken message overrides are logged separately. Browser voice keeps its existing disclosure. Provider-inserted trial announcements are outside HMH control.

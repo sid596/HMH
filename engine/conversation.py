@@ -15,9 +15,11 @@ def validate_recording(audio):
 
 
 class Conversation:
-    def __init__(self, pack, directory, stt_language="hi-IN", tts_language="hi-IN", voice="Nalini"):
+    def __init__(self, pack, directory, stt_language="hi-IN", tts_language="hi-IN", voice="Nalini", include_disclosure=True, message_overrides=None):
         if pack.get("language") and pack["language"] != tts_language:
             raise ValueError("Speaking language must match rubric language")
+        self.include_disclosure=include_disclosure
+        self.message_overrides=message_overrides or {}
         self.session = Session(pack, directory, "live")
         self.session.audit.append("voice_configuration", speaking_language=tts_language,
                                   listening_language=stt_language, voice=voice, model="timbre-v2.5")
@@ -41,7 +43,7 @@ class Conversation:
         # from the selected output language, never from the detected input language.
         if self.session.pack.get("language") not in (None, self.tts_language):
             raise ValueError("Speaking language must match rubric language")
-        return self.session.pack.get("messages") or localized_pack(self.tts_language)["messages"]
+        return {**(self.session.pack.get("messages") or localized_pack(self.tts_language)["messages"]), **self.message_overrides}
 
     def speech_text(self):
         s = self.session
@@ -51,7 +53,7 @@ class Conversation:
             return self.messages()["complete"]
         c = s.clause
         explanation = c["fallback_explain"] if s.attempt >= 2 else c["explain"]
-        disclosure = s.pack["disclosure"] if s.index == 0 and s.attempt == 0 else ""
+        disclosure = s.pack["disclosure"] if self.include_disclosure and s.index == 0 and s.attempt == 0 else ""
         # Derive the acknowledgement from the verdict on every turn. Do not reuse
         # a cached feedback string that may come from an older language/session.
         feedback = self.messages()[self.history[-1]["verdict"]] if self.history else ""

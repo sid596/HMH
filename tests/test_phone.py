@@ -308,3 +308,18 @@ class TrialCallbackAuthenticationTests(ServerTests):
             self.assertIn('trial_token=',fromstring(response.text).find('Gather').attrib['action'])
             record.created-=1801
             self.assertEqual(self.client.post(url,data=form).status_code,403)
+
+
+class ConcisePhoneSpeechTests(unittest.TestCase):
+    def test_phone_omits_long_disclosure_but_keeps_policy_and_question(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
+            service=CallService(d,client_factory=Mock)
+            reviewed=pack()
+            record,_=service.create(reviewed,'short_intro_'+'x'*20)
+            text=record.conversation.speech_text()
+            self.assertNotIn(reviewed['disclosure'],text)
+            self.assertIn(reviewed['clauses'][0]['explain'],text)
+            self.assertIn(reviewed['clauses'][0]['question'],text)
+            self.assertEqual(record.conversation.session.pack['disclosure'],reviewed['disclosure'])
+            record.conversation.session.status='demo_checks_passed'
+            self.assertEqual(record.conversation.speech_text(),'Thank you. Verification is complete. Goodbye.')
