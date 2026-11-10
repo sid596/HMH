@@ -5,7 +5,7 @@ from pathlib import Path
 import streamlit as st
 from engine.provider_errors import ModelRequestError
 from engine.localization import PROFILES
-from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack, ranked_topics, MAX_QUESTIONS
+from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack, ranked_topics, MAX_QUESTIONS, TopicValidationError
 from app.recording import recording_panel
 from app.outbound import render_outbound
 
@@ -70,6 +70,9 @@ def render_builder(root):
                 except ModelRequestError as exc:
                     st.error(str(exc))
                     st.caption("Generation stopped. No new library was accepted and no automatic retry was made.")
+                except TopicValidationError as exc:
+                    st.error("Topic generation stopped: " + str(exc))
+                    st.caption("No new library was accepted. Completed sections are kept in this session; retry explicitly to regenerate failed sections.")
                 except Exception as exc:
                     st.error(f"Topic generation stopped ({type(exc).__name__}). No new library was accepted. Check the document/configuration and retry explicitly.")
             if st.session_state.get("catalog_scope") != scope:

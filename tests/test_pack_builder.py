@@ -117,3 +117,20 @@ class PackBuilderTests(unittest.TestCase):
                 self.assertIsNone(document_reasoning_effort())
             with patch.dict(os.environ,{"SCORER_MODEL":"another-model"}):
                 self.assertIsNone(document_reasoning_effort())
+
+    def test_failed_section_has_safe_actionable_error_and_keeps_valid_sections(self):
+        from engine.pack_builder import TopicValidationError
+        base=sample_catalog('en-IN')
+        quote=base['topics'][0]['sources'][0]['quote']
+        doc={'sha256':'invalid-section-fixture','name':'fixture','pages':[
+            {'page':n,'text':quote+' '+'x'*5200} for n in (1,2)]}
+        def caller(system,payload):
+            page=payload['pages'][0]['page']
+            topic=deepcopy(base['topics'][0]);topic['sources']=[{'page':page,'quote':quote}]
+            if page==2:topic['sources'][0]['quote']='An invented quote which is absent from the page'
+            return {'topics':[topic],'unresolved':[]}
+        cache={}
+        with self.assertRaisesRegex(TopicValidationError,'Pages 2: A generated source quote'):
+            generate_catalog(doc,'en-IN',caller=caller,cache=cache)
+        self.assertEqual(len([k for k in cache if ':batch:' in k]),1)
+        self.assertFalse(any(':catalog:' in k for k in cache))

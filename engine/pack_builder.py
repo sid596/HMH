@@ -15,7 +15,12 @@ from engine.localization import localized_pack, PROFILES
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 300
 MAX_QUESTIONS = 15
-TOPIC_PROMPT_VERSION = "topic-draft-5-parallel"
+TOPIC_PROMPT_VERSION = "topic-draft-6-validation"
+
+
+class TopicValidationError(ValueError):
+    """A safe, application-written validation message; excludes provider payloads."""
+    pass
 
 
 def normalize(text):
@@ -26,19 +31,19 @@ def extract_document(content, filename):
     extraction_started = perf_counter()
     from pypdf import PdfReader
     if len(content) > MAX_PDF_BYTES:
-        raise ValueError("Choose a PDF smaller than 20 MB")
+        raise TopicValidationError("Choose a PDF smaller than 20 MB")
     reader = PdfReader(io.BytesIO(content))
     if reader.is_encrypted:
-        raise ValueError("Use an unlocked PDF")
+        raise TopicValidationError("Use an unlocked PDF")
     if not 0 < len(reader.pages) <= MAX_PAGES:
-        raise ValueError("Use a PDF with 1–300 pages")
+        raise TopicValidationError("Use a PDF with 1–300 pages")
     pages = [{"page": n + 1, "text": page.extract_text() or ""} for n, page in enumerate(reader.pages)]
     empty = [p["page"] for p in pages if len(normalize(p["text"])) < 20]
     if empty:
-        raise ValueError("Text could not be read on pages " + ", ".join(map(str, empty[:20])) +
+        raise TopicValidationError("Text could not be read on pages " + ", ".join(map(str, empty[:20])) +
                          ". This prototype needs a text PDF; OCR is not included. No topics were generated.")
     if sum(len(p["text"]) for p in pages) > 1_500_000:
-        raise ValueError("Document text exceeds this prototype's 1.5 million character limit")
+        raise TopicValidationError("Document text exceeds this prototype's 1.5 million character limit")
     return {"name": filename, "sha256": hashlib.sha256(content).hexdigest(), "pages": pages,
             "synthetic": True, "kind": "uploaded_pdf", "extraction_seconds": round(perf_counter()-extraction_started, 4)}
 
@@ -64,7 +69,7 @@ def model_json(system, payload, *, reasoning_effort=None):
     import httpx
     key, model = os.getenv("SCORER_API_KEY"), os.getenv("SCORER_MODEL")
     if not key or not model:
-        raise ValueError("Configure SCORER_API_KEY and SCORER_MODEL to generate topics")
+        raise TopicValidationError("Configure SCORER_API_KEY and SCORER_MODEL to generate topics")
     body={"model": model, "messages": [{"role": "system", "content": system + "\nReturn exactly one JSON object. Do not wrap it in Markdown."},
          {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
          "response_format": {"type": "json_object"}}
@@ -80,7 +85,7 @@ def document_reasoning_effort():
     configured = os.getenv("DOCUMENT_REASONING_EFFORT")
     if configured:
         if configured not in {"none", "low", "medium", "high", "xhigh", "max"}:
-            raise ValueError("Invalid DOCUMENT_REASONING_EFFORT")
+            raise TopicValidationError("Invalid DOCUMENT_REASONING_EFFORT")
         return configured
     model = os.getenv("SCORER_MODEL", "")
     host = urlsplit(os.getenv("SCORER_BASE_URL", "https://api.openai.com/v1")).hostname
@@ -118,32 +123,32 @@ for a human reviewer, never an authority to declare a topic mandatory.'''
 
 def validate_topics(raw, pages):
     if not isinstance(raw, dict) or not isinstance(raw.get("topics"), list) or not isinstance(raw.get("unresolved"), list):
-        raise ValueError("Invalid topic generator response")
+        raise TopicValidationError("Invalid topic generator response")
     if len(raw["topics"]) > 15 or not all(isinstance(x, str) for x in raw["unresolved"]):
-        raise ValueError("Invalid topic limits or unresolved items")
+        raise TopicValidationError("Invalid topic limits or unresolved items")
     page_text = {}
     for page in pages:
         page_text[page["page"]] = normalize(page_text.get(page["page"], "") + " " + page["text"])
     for topic in raw["topics"]:
         for field in ("title", "category", "summary", "explain", "question", "fallback_explain", "risk_reason"):
             if not isinstance(topic.get(field), str) or not topic[field].strip():
-                raise ValueError("Missing topic text: " + field)
+                raise TopicValidationError("Missing topic text: " + field)
         for field, maximum in (("must_have_facts", 6), ("misconceptions", 5)):
             values = topic.get(field)
             if not isinstance(values, list) or not 1 <= len(values) <= maximum or not all(isinstance(v, str) and v.strip() for v in values):
-                raise ValueError("Invalid facts or misconceptions")
+                raise TopicValidationError("Invalid facts or misconceptions")
         if topic.get("risk") not in ("high", "standard"):
-            raise ValueError("Invalid risk level")
+            raise TopicValidationError("Invalid risk level")
         sources = topic.get("sources")
         if not isinstance(sources, list) or not 1 <= len(sources) <= 4:
-            raise ValueError("Every topic needs a source")
+            raise TopicValidationError("Every topic needs a source")
         for source in sources:
             page, quote = source.get("page"), source.get("quote")
             if type(page) is not int or page not in page_text or not isinstance(quote, str) or len(normalize(quote)) < 12 or normalize(quote) not in page_text[page]:
-                raise ValueError("A generated source quote could not be verified against its cited page")
+                raise TopicValidationError("A generated source quote could not be verified against its cited page")
         priority = topic.get("priority_score", 75 if topic["risk"] == "high" else 25)
         if type(priority) is not int or not 1 <= priority <= 100:
-            raise ValueError("Invalid topic priority")
+            raise TopicValidationError("Invalid topic priority")
         topic["priority_score"] = priority
         topic["required"] = False  # A model cannot set company policy.
     return raw
@@ -164,19 +169,19 @@ def resolve_source_issues(document, issues, caller=topic_model_json):
         "Every resolved note needs at least one exact supporting quote of 12 or more characters.",
         {"issues": issues, "pages": document["pages"]})
     if not isinstance(raw, dict) or not isinstance(raw.get("resolved"), list):
-        raise ValueError("Invalid source-issue review response")
+        raise TopicValidationError("Invalid source-issue review response")
     pages = {p["page"]:normalize(p["text"]) for p in document["pages"]}
     resolved, records = set(), []
     for result in raw["resolved"]:
         index, sources = result.get("issue_index"), result.get("sources")
         if type(index) is not int or not 0 <= index < len(issues) or index in resolved:
-            raise ValueError("Invalid source-issue reference")
+            raise TopicValidationError("Invalid source-issue reference")
         if not isinstance(sources, list) or not sources:
-            raise ValueError("Resolving a source issue requires evidence")
+            raise TopicValidationError("Resolving a source issue requires evidence")
         for source in sources:
             page, quote = source.get("page"), source.get("quote")
             if type(page) is not int or page not in pages or not isinstance(quote, str) or len(normalize(quote)) < 12 or normalize(quote) not in pages[page]:
-                raise ValueError("Source-issue evidence could not be verified")
+                raise TopicValidationError("Source-issue evidence could not be verified")
         resolved.add(index)
         records.append({"issue":issues[index], "sources":sources})
     return [issue for i,issue in enumerate(issues) if i not in resolved], records
@@ -190,7 +195,7 @@ def detect_document_language(document, caller=topic_model_json):
                  "If outside supported languages return unsupported. Copy the evidence verbatim without adding ellipses or translating it.", {"text":sample})
     language, quote = raw.get("language"), raw.get("evidence")
     if language not in PROFILES or not isinstance(quote,str) or not normalize(quote) or normalize(quote) not in normalize(sample):
-        raise ValueError("Could not confidently detect a supported document language. Choose the customer language explicitly.")
+        raise TopicValidationError("Could not confidently detect a supported document language. Choose the customer language explicitly.")
     return language
 
 
@@ -206,7 +211,7 @@ def generate_catalog(document, language, progress=None, caller=None, *, cache=No
     caller = caller or topic_model_json
     workers = int(max_workers if max_workers is not None else os.getenv("DOCUMENT_WORKERS", "3"))
     if not 1 <= workers <= 4:
-        raise ValueError("DOCUMENT_WORKERS must be between 1 and 4")
+        raise TopicValidationError("DOCUMENT_WORKERS must be between 1 and 4")
     effort = document_reasoning_effort()
     # Cache is supplied by the current Streamlit session, never shared globally.
     cache = cache if cache is not None else {}
@@ -230,7 +235,7 @@ def generate_catalog(document, language, progress=None, caller=None, *, cache=No
         language = cache[language_key]
     language_seconds = perf_counter()-language_started
     if language not in PROFILES:
-        raise ValueError("Unsupported language")
+        raise TopicValidationError("Unsupported language")
     batches = chunks(document)
     results = [None] * len(batches)
     pending, reused = [], 0
@@ -246,7 +251,11 @@ def generate_catalog(document, language, progress=None, caller=None, *, cache=No
         progress(completed,len(batches))
     topics_started = perf_counter()
     def process(batch):
-        return validate_topics(caller(EXTRACT_PROMPT, {"language":PROFILES[language]["label"],"pages":batch}),batch)
+        try:
+            return validate_topics(caller(EXTRACT_PROMPT, {"language":PROFILES[language]["label"],"pages":batch}),batch)
+        except TopicValidationError as exc:
+            pages=", ".join(str(n) for n in sorted({p["page"] for p in batch}))
+            raise TopicValidationError(f"Pages {pages}: {exc}. No topics from this section were accepted.") from exc
     if pending:
         # Only independent sections run in parallel. Validation, caching,
         # progress updates and final assembly stay on the caller's thread.
@@ -280,7 +289,7 @@ def generate_catalog(document, language, progress=None, caller=None, *, cache=No
                 topics.append(topic)
         unresolved.extend(raw["unresolved"])
     if not topics:
-        raise ValueError("No source-backed topics were generated; inspect the PDF text")
+        raise TopicValidationError("No source-backed topics were generated; inspect the PDF text")
     initial_issues = list(dict.fromkeys(unresolved))
     review_started = perf_counter()
     unresolved,resolutions = resolve_source_issues(document,initial_issues,caller=caller)
@@ -321,17 +330,17 @@ def sample_catalog(language):
 def compile_pack(catalog, selected, reviewer, reasons=None):
     reasons = reasons or {}
     if not reviewer.strip():
-        raise ValueError("Enter the reviewer's name")
+        raise TopicValidationError("Enter the reviewer's name")
     topics = ranked_topics(catalog)
     if len(selected) > MAX_QUESTIONS:
-        raise ValueError("A verification pack can contain at most 15 questions. Remove optional topics or split the review into separate packs.")
+        raise TopicValidationError("A verification pack can contain at most 15 questions. Remove optional topics or split the review into separate packs.")
     known = {t["id"] for t in topics}
     if not selected or not set(selected) <= known:
-        raise ValueError("Select at least one valid topic")
+        raise TopicValidationError("Select at least one valid topic")
     if any(t["required"] and t["id"] not in selected for t in topics):
-        raise ValueError("Required topics cannot be omitted")
+        raise TopicValidationError("Required topics cannot be omitted")
     if catalog["unresolved"]:
-        raise ValueError("Resolve document questions before compiling a runnable pack")
+        raise TopicValidationError("Resolve document questions before compiling a runnable pack")
     exclusions = []
     for topic in topics:
         if topic["id"] not in selected:
