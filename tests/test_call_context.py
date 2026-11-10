@@ -156,3 +156,12 @@ class TranscriptionFailureCacheTests(unittest.TestCase):
         self.assertEqual(calls,3)
         self.assertEqual(result['performance']['reused_clips'],1)
         self.assertEqual(len(result['segments']),2)
+
+class CleanupContractionTests(unittest.TestCase):
+    def test_expanding_negative_contraction_preserves_polarity(self):
+        from engine.call_context import suggest_transcript_review
+        raw={'segments':[{'start_seconds':0,'end_seconds':5,'speaker':'unknown','text':"I don't get a refund?"}]}
+        caller=Mock(return_value={'utterances':[{'segment_index':0,'source_text':"I don't get a refund?",'text':'I do not get a refund?','suggested_speaker':'customer','reason':'Expanded contraction'}]})
+        result=suggest_transcript_review(raw,caller)
+        self.assertEqual(result['segments'][0]['speaker'],'customer')
+        self.assertEqual(result['segments'][0]['raw_text'],"I don't get a refund?")

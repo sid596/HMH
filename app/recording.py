@@ -86,7 +86,7 @@ def recording_panel(catalog):
                     key="suggestion_table:"+suggestion_key)
                 confirmed=st.checkbox("I checked these suggested edits and speaker labels against the recording.",key="confirm_transcript_suggestions:"+suggestion_key)
                 if st.button("Apply reviewed suggestions",disabled=not confirmed):
-                    st.session_state.prior_transcript={**transcript,"segments":[{**s,"role_origin":"reviewer_confirmed_model_suggestion"} for s in proposed],"raw_transcript":suggestions["raw_transcript"],"speaker_attribution":"reviewer_confirmed_suggestions"}
+                    st.session_state.prior_transcript={**transcript,"segments":[{**s,"role_origin":"reviewer_confirmed_model_suggestion" if s["speaker"]!="unknown" else "reviewer_reviewed_role_unknown"} for s in proposed],"raw_transcript":suggestions["raw_transcript"],"speaker_attribution":"reviewer_confirmed_suggestions"}
                     st.session_state.pop("transcript_suggestions",None)
                     st.rerun()
             st.caption("Edit recognised text or speaker labels if needed. Labels: agent, customer, unknown. Keep timing fields unchanged.")
