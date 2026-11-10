@@ -253,10 +253,10 @@ class CallService:
     def twiml(self,record,waiting=False):
         response=Element("Response")
         c=record.conversation
-        if record.trial and record.hops>=8 and c.session.status=="active":
+        if record.trial and record.hops>=10 and c.session.status=="active":
             c.session.status="human_review"
             c.session.audit.append("session_finished",status="human_review",reason="Trial callback budget reached")
-            SubElement(response,"Say",language="en-US").text="The trial call limit was reached. Verification needs human review."
+            SubElement(response,"Say",language="en-US").text="This demo has reached its call limit. Your verification is incomplete."
             SubElement(response,"Hangup")
             return tostring(response,encoding="unicode")
         if record.phase in {"failed","cancelled","completed"}:

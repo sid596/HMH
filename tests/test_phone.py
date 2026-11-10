@@ -194,7 +194,7 @@ class GatherTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
             service=CallService(d,client_factory=Mock)
             record,_=service.create(pack(),'gather_'+'h'*20)
-            record.trial=True;record.hops=8;record.phase='ready'
+            record.trial=True;record.hops=10;record.phase='ready'
             xml=fromstring(service.twiml(record))
             self.assertIsNotNone(xml.find('Hangup'))
             self.assertEqual(record.conversation.session.status,'human_review')
@@ -323,3 +323,20 @@ class ConcisePhoneSpeechTests(unittest.TestCase):
             self.assertEqual(record.conversation.session.pack['disclosure'],reviewed['disclosure'])
             record.conversation.session.status='demo_checks_passed'
             self.assertEqual(record.conversation.speech_text(),'Thank you. Verification is complete. Goodbye.')
+
+
+class TrialTenHopBoundaryTests(unittest.TestCase):
+    def test_eight_and_nine_hops_continue_ten_stops(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
+            service=CallService(d,client_factory=Mock)
+            record,_=service.create(pack(),'ten_hops_'+'x'*20)
+            record.trial=True;record.phase='ready'
+            record.audio[record.conversation.turn]=b'RIFF_question'
+            for hops in (8,9):
+                record.hops=hops
+                self.assertIsNotNone(fromstring(service.twiml(record)).find('Gather'))
+                self.assertEqual(record.conversation.session.status,'active')
+            record.hops=10
+            xml=fromstring(service.twiml(record))
+            self.assertIsNotNone(xml.find('Hangup'))
+            self.assertIn('verification is incomplete',xml.find('Say').text)

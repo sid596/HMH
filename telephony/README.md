@@ -6,7 +6,7 @@ This is a separate, single-worker FastAPI backend. Streamlit is the review/call-
 
 Default `PHONE_STT_MODE=gather`: Twilio Gather transcribes customer speech; Timbre generates the voice; HMH assesses transcripts against the reviewed pack. No Prisma or answer-audio recording is used on this phone path. Browser microphone and optional prior-call uploads still use Prisma. Set `PHONE_STT_MODE=prisma_record` only on an account with Record enabled to use the original audio path.
 
-Twilio's trial supports Gather and Play but restricts routing and call creation, 10-minute calls, 75 total minutes and 10 action/redirect hops. Trial packs are capped at 3 topics. Waiting polls also consume hops; the backend stops for human review before its conservative 8-hop budget is exhausted. This is implementation against documented capabilities, not a verified live trial call. The trial documentation also lists restricted call-creation templates, so account acceptance of our custom answer URL must be tested before claiming the phone demo works.
+Twilio's trial supports Gather and Play but restricts routing and call creation, 10-minute calls, 75 total minutes and 10 action/redirect hops. Trial packs are capped at 3 topics. Waiting polls also consume hops; the backend uses a 10-hop cutoff, matching the published trial limit. Its local counter is an approximation; Twilio can terminate first. The closing message identifies an incomplete verification due to the demo limit. This is implementation against documented capabilities, not a verified live trial call. The trial documentation also lists restricted call-creation templates, so account acceptance of our custom answer URL must be tested before claiming the phone demo works.
 
 ## Local setup
 
