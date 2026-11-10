@@ -179,3 +179,29 @@ class UnknownTurnFilteringTests(unittest.TestCase):
         self.assertEqual(record['excluded_unknown_segments'][0]['text'],'Opening chatter')
         self.assertEqual(record['transcript_before_filtering'],transcript)
         self.assertEqual(len(transcript['segments']),2)
+
+class ContextEvidenceReferenceTests(unittest.TestCase):
+    def transcript(self):
+        return {'segments':[{'speaker':'unknown','text':'Opening chatter'}, {'speaker':'customer','text':'When does the cancellation window start?','source_segment_index':9}, {'speaker':'agent','text':'It starts on receipt of the document.'}]}
+
+    def test_evidence_id_copies_exact_reviewed_quote_after_unknown_filtering(self):
+        caller=Mock(return_value={'notes':[{'topic_id':'cancellation','evidence_id':'evidence_0000','kind':'customer_question','observation':'Needs deadline clarification'}],'preferred_language':None,'preference_evidence':None})
+        result=analyse_context(sample_catalog('en-IN'),self.transcript(),caller)
+        note=result['call_context']['notes'][0]
+        self.assertEqual(note['segment_index'],0)
+        self.assertEqual(note['quote'],'When does the cancellation window start?')
+        self.assertEqual(note['speaker'],'customer')
+        sent=caller.call_args.args[1]['segments']
+        self.assertNotIn('source_segment_index',sent[0])
+
+    def test_wrong_legacy_index_is_repaired_only_by_unique_exact_quote(self):
+        caller=Mock(return_value={'notes':[{'topic_id':'cancellation','segment_index':9,'quote':'cancellation window start','kind':'customer_question','observation':'Needs clarification'}],'preferred_language':None,'preference_evidence':None})
+        result=analyse_context(sample_catalog('en-IN'),self.transcript(),caller)
+        self.assertTrue(result['call_context']['notes'][0]['reference_repaired'])
+        caller.return_value['notes'][0]['quote']='A fabricated promise of free coverage'
+        with self.assertRaises(ValueError):analyse_context(sample_catalog('en-IN'),self.transcript(),caller)
+
+    def test_invented_evidence_id_is_rejected(self):
+        caller=Mock(return_value={'notes':[{'topic_id':'cancellation','evidence_id':'evidence_9999','kind':'confusion','observation':'test'}],'preferred_language':None,'preference_evidence':None})
+        with self.assertRaisesRegex(ValueError,'unknown transcript evidence ID'):
+            analyse_context(sample_catalog('en-IN'),self.transcript(),caller)
