@@ -29,7 +29,7 @@ def render_builder(root):
             requested_language = st.selectbox("Customer language", ["auto"] + list(PROFILES),
                 format_func=lambda code: "Automatic - use document language" if code == "auto" else PROFILES[code]["label"], key="builder_language")
             language = "en-IN" if requested_language == "auto" else requested_language
-            st.caption("The PDF's language is detected automatically. Override it when the customer prefers a different language; this sets the questions and voice.")
+            st.caption("Automatic detects the PDF language. Selecting English or another language skips detection and sets the questions and voice.")
         fixture = Path(root) / "output/pdf/nivara_clearcare_fictional_policy.pdf"
         if fixture.exists():
             st.download_button("Download fictional insurance test PDF", fixture.read_bytes(),

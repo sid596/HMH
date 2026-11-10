@@ -134,3 +134,21 @@ class PackBuilderTests(unittest.TestCase):
             generate_catalog(doc,'en-IN',caller=caller,cache=cache)
         self.assertEqual(len([k for k in cache if ':batch:' in k]),1)
         self.assertFalse(any(':catalog:' in k for k in cache))
+
+    def test_language_detection_uses_supplied_excerpt_id_without_quote_copying(self):
+        from engine.pack_builder import detect_document_language, TopicValidationError
+        document=sample_catalog("en-IN")["document"]
+        caller=Mock(return_value={"language":"en-IN","evidence_id":0})
+        self.assertEqual(detect_document_language(document,caller),"en-IN")
+        caller.return_value={"language":"en-IN","evidence_id":99}
+        with self.assertRaises(TopicValidationError):detect_document_language(document,caller)
+        caller.return_value={"language":"unsupported","evidence_id":0}
+        with self.assertRaises(TopicValidationError):detect_document_language(document,caller)
+
+    def test_explicit_english_does_not_call_language_detection(self):
+        from unittest.mock import patch
+        catalog=sample_catalog("en-IN")
+        caller=Mock(return_value={"topics":deepcopy(catalog["topics"]),"unresolved":[]})
+        with patch("engine.pack_builder.detect_document_language",side_effect=AssertionError("Must skip detection")):
+            result=generate_catalog(catalog["document"],"en-IN",caller=caller)
+        self.assertEqual(result["language"],"en-IN")

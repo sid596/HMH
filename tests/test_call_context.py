@@ -68,7 +68,7 @@ class CallContextTests(unittest.TestCase):
 
     def test_auto_language_uses_document_evidence(self):
         document=sample_catalog('en-IN')['document']
-        caller=Mock(return_value={'language':'en-IN','evidence':'you pay 1,000 rupees every month'})
+        caller=Mock(return_value={'language':'en-IN','evidence_id':0})
         self.assertEqual(detect_document_language(document,caller),'en-IN')
-        caller.return_value={'language':'en-IN','evidence':'This invented quote is not here'}
+        caller.return_value={'language':'en-IN','evidence_id':100}
         with self.assertRaises(ValueError):detect_document_language(document,caller)
