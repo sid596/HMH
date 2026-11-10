@@ -238,3 +238,14 @@ class RelatedTopicPriorityTests(unittest.TestCase):
         saved=compile_pack(catalog,{'contribution','returns','cancellation'},'Reviewer')
         self.assertNotIn('early_exit',[c['id'] for c in saved['clauses']])
         self.assertEqual(saved['call_context']['related_topics'][0]['topic_id'],'early_exit')
+
+
+class MultilingualEvidenceTests(unittest.TestCase):
+    def test_reviewed_customer_quotes_remain_exact_in_supported_languages(self):
+        for text in [
+            'मुझे समझ नहीं आया, पंद्रह दिन पैसे देने से शुरू होते हैं या दस्तावेज मिलने से?',
+            'मला शंका आहे, पंधरा दिवस पैसे भरल्यापासून की कागदपत्र मिळाल्यापासून मोजायचे?',
+            'ನನಗೆ ಗೊಂದಲವಾಗಿದೆ, ಹದಿನೈದು ದಿನಗಳು ಹಣ ಪಾವತಿಸಿದ ದಿನದಿಂದಲೋ ಅಥವಾ ದಾಖಲೆ ಸಿಕ್ಕ ದಿನದಿಂದಲೋ?']:
+            caller=Mock(return_value={'notes':[{'topic_id':'cancellation','evidence_id':'evidence_0000','kind':'customer_question','observation':'Clarify deadline'}],'preferred_language':None,'preference_evidence':None})
+            result=analyse_context(sample_catalog('en-IN'),{'segments':[{'speaker':'customer','text':text}]},caller)
+            self.assertEqual(result['call_context']['notes'][0]['quote'],text)

@@ -37,10 +37,15 @@ class BuilderAppTests(unittest.TestCase):
             app.session_state.prior_transcript=raw
             app.session_state.transcript_suggestions=proposal
             app.run()
-            next(c for c in app.checkbox if c.key=='call_context_permission').check().run()
             self.assertFalse(app.exception)
             next(c for c in app.checkbox if c.label=='I checked these suggested edits and speaker labels against the recording.').check().run()
             next(b for b in app.button if b.label=='Apply reviewed suggestions').click().run()
             self.assertFalse(app.exception)
             self.assertEqual(app.session_state.prior_transcript['segments'][0]['speaker'],'customer')
             self.assertEqual(app.session_state.prior_transcript['raw_transcript'],raw)
+
+    def test_recording_setup_controls_are_removed(self):
+        app=AppTest.from_file(APP).run()
+        labels={s.label for s in app.selectbox}
+        self.assertTrue({'Speaker channels','Recording language','Concurrent transcription requests'}.isdisjoint(labels))
+        self.assertFalse(any(c.key=='call_context_permission' for c in app.checkbox))
