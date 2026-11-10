@@ -54,13 +54,15 @@ def health(request:Request):
     admin(request)
     missing=[key for key in REQUIRED if not os.getenv(key)]
     issue=None
+    account_type=None
     if not missing:
         try:
             validate_config()
-            service.check_account()
+            account_type=service.check_account()
         except ValueError as exc:issue=str(exc)
         except Exception as exc:issue=provider_error(exc)
-    return {"ready":not missing and issue is None,"missing":missing,"configuration_issue":issue}
+    return {"ready":not missing and issue is None,"missing":missing,"configuration_issue":issue,
+            "max_topics":3 if account_type=="Trial" else 15}
 
 
 @app.post('/calls')

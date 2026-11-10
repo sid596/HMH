@@ -50,6 +50,10 @@ def render_outbound(pack):
                 else:
                     status=response.json()
                     ready=status.get("ready",False)
+                    limit=status.get("max_topics",15)
+                    if isinstance(limit,int) and len(pack.get("clauses",[]))>limit:
+                        ready=False
+                        st.warning(f"This pack has {len(pack['clauses'])} topics. Your phone account allows at most {limit} topics per demo call. Return to the builder, remove topics and save the smaller pack.")
                     if not ready:
                         if status.get("missing"):
                             st.info("Backend still needs: "+", ".join(status["missing"]))
@@ -69,7 +73,16 @@ def render_outbound(pack):
                     st.success("Preparing the opening audio, then calling your configured phone. Do not click again while this request is active.")
                 else:
                     st.session_state.outbound_call_active=False
-                    st.error("Call was not started. Check backend configuration and active-call status.")
+                    detail=None
+                    try:
+                        detail=response.json().get("detail")
+                    except ValueError:
+                        pass
+                    safe_prefixes=("Use at most 3 topics", "A test call is already active", "This demo allows at most", "Save a reviewed demo pack", "The phone pack needs", "Missing backend settings:", "Twilio trial blocks")
+                    if isinstance(detail,str) and detail.startswith(safe_prefixes) and len(detail)<600:
+                        st.error("Call was not started: " + detail)
+                    else:
+                        st.error(f"Call request rejected (HTTP {response.status_code}). Check backend configuration and active-call status.")
             except httpx.HTTPError:
                 st.warning("Could not confirm setup. Use Refresh call status before trying again; the request may have been accepted.")
         call_id=st.session_state.get("outbound_call_id")

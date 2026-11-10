@@ -216,3 +216,16 @@ class GatherServerTests(ServerTests):
             self.assertEqual(self.client.post(path,data=form,headers=headers).status_code,200)
             self.assertEqual(self.client.post(path,data=form,headers=headers).status_code,200)
             self.assertEqual(service.scorer.call_count,1)
+
+
+class TrialPackLimitTests(unittest.TestCase):
+    def test_oversized_trial_pack_is_rejected_before_dialling(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
+            client=Mock()
+            client.api.accounts.return_value.fetch.return_value=SimpleNamespace(type='Trial')
+            service=CallService(d,client_factory=lambda:client)
+            large=pack()
+            large['clauses']=[dict(deepcopy(large['clauses'][0]),id=f'topic_{i}') for i in range(4)]
+            with self.assertRaisesRegex(ValueError,'at most 3 topics'):
+                service.create(large,'oversized_'+'x'*20)
+            client.calls.create.assert_not_called()
