@@ -111,3 +111,16 @@ class Conversation:
                 self.error["message"] = str(exc)
             self.session.audit.append("voice_turn_failed", stage=stage, error_type=type(exc).__name__)
             return False
+
+    def receive_transcript(self, answer, scorer, metadata=None):
+        """Assess a provider transcript without fabricating an audio recording."""
+        if self.session.status != "active":
+            return False
+        answer = answer.strip()
+        if not answer or len(answer) > 12000:
+            raise ValueError("No usable speech transcript")
+        evidence = scorer(answer, self.session.clause)
+        action = self.session.submit(answer, evidence, source="twilio_gather", transcript_metadata=metadata or {})
+        self.session.audit.append("transcription", transcript=answer, metadata=metadata or {}, provider="twilio_gather")
+        self.history.append({"answer": answer, "verdict": evidence.verdict, "action": action})
+        return True

@@ -12,7 +12,7 @@ from engine.core import Session
 from engine.scorer import fixture_evidence
 from telephony.service import CallService,validate_pack
 
-ENV={'TWILIO_ACCOUNT_SID':'AC'+'a'*32,'TWILIO_AUTH_TOKEN':'not-a-real-token',
+ENV={'PHONE_STT_MODE':'prisma_record','TWILIO_ACCOUNT_SID':'AC'+'a'*32,'TWILIO_AUTH_TOKEN':'not-a-real-token',
      'TWILIO_FROM_NUMBER':'+12025550101','TWILIO_TO_NUMBER':'+12025550102',
      'HMH_PUBLIC_BASE_URL':'https://hmh.example.test','HMH_CALL_API_TOKEN':'test-control-token-'+'x'*32,
      'GNANI_API_KEY':'test-gnani-key','SCORER_API_KEY':'test-scorer-key','SCORER_MODEL':'test-model'}
@@ -156,3 +156,63 @@ class RecordingCallbackTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(record.pending_turn)
             self.assertEqual(record.conversation.session.index,1)
             self.assertIn(record.conversation.turn,record.audio)
+
+class GatherTests(unittest.IsolatedAsyncioTestCase):
+    async def test_trial_gather_uses_transcript_once_without_prisma(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
+            client=Mock()
+            client.api.accounts.return_value.fetch.return_value=SimpleNamespace(type='Trial')
+            stt=Mock(side_effect=AssertionError('Prisma must not be used'))
+            scorer=Mock(return_value=fixture_evidence(pack()['clauses'][0],'attentive')[1])
+            service=CallService(d,client_factory=lambda:client,transcriber=stt,scorer=scorer,synthesizer=Mock(return_value=b'RIFF_next'))
+            record,_=service.create(pack(),'gather_'+'x'*20)
+            record.phase='ready';record.audio[record.conversation.turn]=b'RIFF_open'
+            xml=fromstring(service.twiml(record))
+            self.assertIsNotNone(xml.find('Gather'))
+            self.assertIsNone(xml.find('Record'))
+            self.assertEqual(xml.find('Gather').attrib['language'],'en-IN')
+            turn=record.conversation.turn
+            await service.gathered(record,turn,'1,000 each month for 3 years','0.9')
+            await service.gathered(record,turn,'duplicate','0.9')
+            self.assertEqual(scorer.call_count,1)
+            stt.assert_not_called()
+            self.assertEqual(record.conversation.session.index,1)
+            events=record.conversation.session.audit.records()
+            assessment=next(e for e in events if e['event']=='assessment')
+            self.assertEqual(assessment['payload']['input_source'],'twilio_gather')
+
+    async def test_silence_goes_to_human_review_without_scoring(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
+            scorer=Mock()
+            service=CallService(d,client_factory=Mock,scorer=scorer,synthesizer=Mock(return_value=b'RIFF_end'))
+            record,_=service.create(pack(),'gather_'+'s'*20)
+            await service.gathered(record,record.conversation.turn,'')
+            self.assertEqual(record.conversation.session.status,'human_review')
+            scorer.assert_not_called()
+
+    async def test_trial_hop_budget_stops_instead_of_false_pass(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
+            service=CallService(d,client_factory=Mock)
+            record,_=service.create(pack(),'gather_'+'h'*20)
+            record.trial=True;record.hops=8;record.phase='ready'
+            xml=fromstring(service.twiml(record))
+            self.assertIsNotNone(xml.find('Hangup'))
+            self.assertEqual(record.conversation.session.status,'human_review')
+
+class GatherServerTests(ServerTests):
+    def test_signed_gather_callback_is_authenticated_and_deduplicated(self):
+        from twilio.request_validator import RequestValidator
+        with patch.dict(os.environ,{'PHONE_STT_MODE':'gather'}):
+            service=self.server.service
+            service.synthesizer=Mock(return_value=b'RIFF_next')
+            service.scorer=Mock(return_value=fixture_evidence(pack()['clauses'][0],'attentive')[1])
+            record,_=service.create(pack(),'signed_'+'g'*20)
+            record.phase='ready'
+            path='/twilio/gathered/'+record.id+'/'+record.conversation.turn
+            form={'AccountSid':ENV['TWILIO_ACCOUNT_SID'],'CallSid':'CA'+'b'*32,'SpeechResult':'1,000 each month for 3 years','Confidence':'0.9'}
+            self.assertEqual(self.client.post(path,data=form).status_code,403)
+            signature=RequestValidator(ENV['TWILIO_AUTH_TOKEN']).compute_signature(ENV['HMH_PUBLIC_BASE_URL']+path,form)
+            headers={'X-Twilio-Signature':signature}
+            self.assertEqual(self.client.post(path,data=form,headers=headers).status_code,200)
+            self.assertEqual(self.client.post(path,data=form,headers=headers).status_code,200)
+            self.assertEqual(service.scorer.call_count,1)

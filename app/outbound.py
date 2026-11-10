@@ -28,9 +28,9 @@ def health_error(status_code):
 
 def render_outbound(pack):
     with st.expander("Call my test phone",expanded=False):
-        st.write("Start a separate verification call using this saved pack. It speaks with Timbre, listens with Prisma, and assesses answers against the same reviewed topics.")
-        st.info("Twilio trial currently blocks the Record/Stream features needed to send phone audio to Prisma. The full Gnani phone conversation requires an account with those features enabled.")
-        st.caption("Maximum 15 questions including retries. This first phone version waits for your answer after a beep; it does not support interrupting the AI. Phone and recording charges are billed by Twilio.")
+        st.write("Start a separate verification call using this saved pack. It speaks with Timbre and assesses answers against the same reviewed topics. Phone speech recognition uses Twilio Gather by default; browser voice uses Prisma.")
+        st.info("Phone demo: Twilio transcribes answers; Gnani Timbre speaks. Prisma is not used for phone listening in Gather mode. Trial demo packs should contain at most 3 topics.")
+        st.caption("Maximum 15 questions including retries. Answer after the question finishes, then pause. This version does not support interrupting the AI. Phone and recording charges are billed by Twilio.")
         reviewed=bool(pack.get("review_record",{}).get("reviewer")) and 1 <= len(pack.get("clauses",[])) <= 15
         api=call_setting("HMH_CALL_API_URL").rstrip("/")
         token=call_setting("HMH_CALL_API_TOKEN")
@@ -56,7 +56,7 @@ def render_outbound(pack):
                         if status.get("configuration_issue"):st.error(status["configuration_issue"])
             except (httpx.HTTPError,ValueError):
                 st.info("Call backend is not reachable. Start it and check HMH_CALL_API_URL.")
-        consent=st.checkbox("Call my configured test phone now. I agree to synthetic answer recording and the provider's call charges.",key="outbound_consent")
+        consent=st.checkbox("Call my configured test phone now. I agree to synthetic answer transcription and the provider's call charges.",key="outbound_consent")
         active=st.session_state.get("outbound_call_active",False)
         if st.button("Call my test phone",type="primary",disabled=not ready or not reviewed or not consent or active):
             request_id=uuid.uuid4().hex

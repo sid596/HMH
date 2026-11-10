@@ -103,6 +103,18 @@ async def answer(call_id:str,request:Request):
     return xml(record)
 
 
+@app.post('/twilio/gathered/{call_id}/{turn}')
+async def gathered(call_id:str,turn:str,request:Request,tasks:BackgroundTasks):
+    record=record_for(call_id)
+    form=await signed_form(request,record)
+    if record.stt_mode!="gather":raise HTTPException(400,"Wrong speech mode")
+    if turn==record.conversation.turn and turn not in record.submitted_turns and record.phase not in {"cancelled","failed","completed"}:
+        record.phase="processing"
+        record.processing_since=record.processing_since or time.time()
+        tasks.add_task(service.gathered,record,turn,str(form.get("SpeechResult","")),form.get("Confidence"))
+    return xml(record,waiting=record.phase=="processing")
+
+
 @app.post('/twilio/recorded/{call_id}/{turn}')
 async def recorded(call_id:str,turn:str,request:Request,tasks:BackgroundTasks):
     record=record_for(call_id)

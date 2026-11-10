@@ -2,9 +2,11 @@
 
 This is a separate, single-worker FastAPI backend. Streamlit is the review/call-control UI; it cannot itself serve the Twilio answer and recording callbacks.
 
-## Current Twilio trial restriction
+## Phone speech recognition
 
-Twilio's [current Voice trial documentation](https://www.twilio.com/docs/usage/trials/try-out-voice) explicitly blocks `<Record>` and `<Stream>`. This backend uses `<Record>` to obtain answer audio for Prisma. It checks the account type and refuses trial calls before dialling. No code bypasses that restriction or upgrades the account. An account with the required features enabled and a permitted caller number is needed. Destination permissions and account/number availability still apply.
+Default `PHONE_STT_MODE=gather`: Twilio Gather transcribes customer speech; Timbre generates the voice; HMH assesses transcripts against the reviewed pack. No Prisma or answer-audio recording is used on this phone path. Browser microphone and optional prior-call uploads still use Prisma. Set `PHONE_STT_MODE=prisma_record` only on an account with Record enabled to use the original audio path.
+
+Twilio's trial supports Gather and Play but restricts routing and call creation, 10-minute calls, 75 total minutes and 10 action/redirect hops. Trial packs are capped at 3 topics. Waiting polls also consume hops; the backend stops for human review before its conservative 8-hop budget is exhausted. This is implementation against documented capabilities, not a verified live trial call. The trial documentation also lists restricted call-creation templates, so account acceptance of our custom answer URL must be tested before claiming the phone demo works.
 
 ## Local setup
 
@@ -44,13 +46,9 @@ The frontend checks the protected backend `/health` endpoint. It reports missing
 
 ## How the call works
 
-- The server prepares the opening disclosure/question and a localized waiting message using Timbre **before** calling. It calls only the configured test destination.
-- The signed answer webhook returns `<Play>` with Timbre WAV audio followed by `<Record>` (25-second maximum, 3-second silence timeout, `#` to finish). A recording disclosure is spoken first. This is turn-based: interrupting the assistant is not implemented.
-- The record action moves the caller into a waiting loop. The separate `recordingStatusCallback` triggers work only when the recording is available, as required by [Twilio's Record guidance](https://www.twilio.com/docs/voice/twiml/record).
-- A worker fetches audio from a reconstructed Twilio recording URL using account authentication, sends it to Prisma, scores the transcript, applies the Python policy, and prepares the next Timbre response. Twilio's own speech-to-text is not used.
-- Questions/retries share a total budget of 15 answer turns. Exhaustion stops with human review, rather than pretending unasked topics passed. A call also has a 15-minute provider time limit.
-- Failed audio/assessment routes to human review or ends the call. It never accepts consent. The final outcome remains the pack's demo/check result, not legal consent certification.
-- **Refresh call status** shows progress; **End test call** requests hangup. An uncertain network error must be checked in Twilio before redialling.
+The backend prepares opening audio with a truthful transcript notice before dialling. It plays Timbre audio, then Gather listens for speech in the pack language (Hinglish uses Hindi recognition). Pause for 3 seconds to finish an answer. An empty transcript ends in human review. A signed, turn-specific callback returns waiting instructions immediately, while a worker scores the transcript and prepares Timbre audio. Duplicate/stale callbacks do not rescore. Twilio recognition confidence is logged as provider metadata, not treated as customer understanding. The prototype is turn-based, without interruption support.
+
+The optional `prisma_record` mode retains Record/Prisma callbacks and is rejected on trial accounts. Failure, silence, processing timeout, question exhaustion or trial-hop exhaustion never counts as a pass. Call status is available through the protected API and frontend refresh button. No live call has been verified yet.
 
 ## Protections and limits
 

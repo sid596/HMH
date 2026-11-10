@@ -1,4 +1,4 @@
-"""Twilio turn-based phone verification. No provider speech model replaces Gnani."""
+"""Twilio turn-based phone verification. Gather phone transcription or optional paid Prisma recording mode."""
 import asyncio
 from dataclasses import dataclass, field
 import hmac
@@ -26,6 +26,20 @@ RECORDING_NOTICE={"en-IN":"This synthetic test call records your answers for aut
  "hi-en":"Yeh synthetic test call aapke answers record karti hai. Har question ke baad beep sunkar answer dein. Finish hone par bolna rokein ya hash button dabayein.",
  "mr-IN":"या काल्पनिक चाचणी कॉलमध्ये तुमची उत्तरे ध्वनिमुद्रित केली जातात. प्रत्येक प्रश्नानंतर बीप ऐकून उत्तर द्या. उत्तर संपल्यावर बोलणे थांबवा किंवा हॅश बटण दाबा.",
  "kn-IN":"ಈ ಕಾಲ್ಪನಿಕ ಪರೀಕ್ಷಾ ಕರೆಯಲ್ಲಿ ನಿಮ್ಮ ಉತ್ತರಗಳನ್ನು ಧ್ವನಿಮುದ್ರಿಸಲಾಗುತ್ತದೆ. ಪ್ರತಿ ಪ್ರಶ್ನೆಯ ನಂತರ ಬೀಪ್ ಕೇಳಿದ ಮೇಲೆ ಉತ್ತರಿಸಿ. ಮುಗಿದಾಗ ಮಾತನಾಡುವುದನ್ನು ನಿಲ್ಲಿಸಿ ಅಥವಾ ಹ್ಯಾಶ್ ಬಟನ್ ಒತ್ತಿರಿ."}
+
+GATHER_NOTICE={
+ "en-IN":"This is a synthetic verification call. Twilio transcribes your answers and HMH saves the transcript. Gnani Timbre provides this voice. Please answer after each question and pause when finished.",
+ "hi-IN":"यह एक काल्पनिक सत्यापन कॉल है। ट्विलियो आपके जवाब को लिखित रूप में बदलता है और एचएमएच उसे सहेजता है। यह आवाज़ ज्ञानी टिम्बर की है। हर सवाल के बाद जवाब दें और पूरा होने पर रुकें।",
+ "hi-en":"Yeh synthetic verification call hai. Twilio aapke answers transcribe karta hai aur HMH transcript save karta hai. Voice Gnani Timbre ki hai. Har question ke baad answer dein aur finish hone par ruk jaayein.",
+ "mr-IN":"हा काल्पनिक पडताळणी कॉल आहे. ट्विलियो तुमची उत्तरे मजकुरात बदलतो आणि एचएमएच तो साठवतो. हा आवाज ज्ञानी टिम्बरचा आहे. प्रत्येक प्रश्नानंतर उत्तर द्या आणि झाल्यावर थांबा.",
+ "kn-IN":"ಇದು ಕಾಲ್ಪನಿಕ ಪರಿಶೀಲನಾ ಕರೆ. ಟ್ವಿಲಿಯೊ ನಿಮ್ಮ ಉತ್ತರಗಳನ್ನು ಪಠ್ಯಕ್ಕೆ ಬದಲಿಸುತ್ತದೆ ಮತ್ತು ಎಚ್‌ಎಂಎಚ್ ಅದನ್ನು ಉಳಿಸುತ್ತದೆ. ಈ ಧ್ವನಿ ಜ್ಞಾನಿ ಟಿಂಬರ್‌ನದು. ಪ್ರತಿ ಪ್ರಶ್ನೆಯ ನಂತರ ಉತ್ತರಿಸಿ ಮತ್ತು ಮುಗಿದಾಗ ವಿರಾಮ ನೀಡಿ."
+}
+
+def speech_mode():
+    mode=os.getenv("PHONE_STT_MODE","gather")
+    if mode not in {"gather","prisma_record"}:
+        raise ValueError("PHONE_STT_MODE must be gather or prisma_record")
+    return mode
 
 
 def validate_config():
@@ -90,6 +104,10 @@ class PhoneCall:
     recordings:set=field(default_factory=set)
     pending_turn:str|None=None
     processing_since:float|None=None
+    stt_mode:str="gather"
+    trial:bool=False
+    hops:int=0
+    submitted_turns:set=field(default_factory=set)
     lock:asyncio.Lock=field(default_factory=asyncio.Lock)
 
 
@@ -116,8 +134,10 @@ class CallService:
             account=self.client().api.accounts(key[0]).fetch()
             account_type=getattr(account,"type",None)
             self._account_cache=(key,time.time(),account_type)
-        if account_type=="Trial":
+        if account_type=="Trial" and speech_mode()=="prisma_record":
             raise ValueError("Twilio trial blocks Record and Stream. This Gnani phone flow requires those features enabled; no call was placed.")
+
+        return account_type
 
     def base(self):
         return os.environ["HMH_PUBLIC_BASE_URL"].rstrip("/")
@@ -137,10 +157,12 @@ class CallService:
             expired=[key for key,c in self.calls.items() if c.created<time.time()-3600 and c.phase in {"completed","failed","cancelled"}]
             for key in expired:
                 del self.calls[key]
-        self.check_account()
+        account_type=self.check_account()
+        if account_type=="Trial" and len(pack["clauses"])>3:
+            raise ValueError("Use at most 3 topics for the trial demo; Twilio limits callback hops to 10.")
         language=pack["language"]
         conversation=Conversation(pack,self.directory,"indic-auto",language,PROFILES[language]["voice"])
-        record=PhoneCall(request_id,conversation)
+        record=PhoneCall(request_id,conversation,stt_mode=speech_mode(),trial=account_type=="Trial")
         self.calls[request_id]=record
         return record,True
 
@@ -148,7 +170,7 @@ class CallService:
         try:
             c=record.conversation
             # Prepare audio BEFORE ringing the phone, so the answer webhook responds immediately.
-            opening=RECORDING_NOTICE[c.tts_language]+" "+c.speech_text()
+            opening=(GATHER_NOTICE if record.stt_mode=="gather" else RECORDING_NOTICE)[c.tts_language]+" "+c.speech_text()
             record.audio[c.turn]=await asyncio.to_thread(self.synthesizer,opening,language=c.tts_language,voice=c.voice)
             record.audio["waiting"]=await asyncio.to_thread(self.synthesizer,WAITING[c.tts_language],language=c.tts_language,voice=c.voice)
             if record.phase=="cancelled":
@@ -159,10 +181,10 @@ class CallService:
                 url=self.base()+f"/twilio/answer/{record.id}",method="POST",
                 status_callback=self.base()+f"/twilio/status/{record.id}",
                 status_callback_event=["initiated","ringing","answered","completed"],
-                timeout=30,time_limit=900)
+                timeout=30,time_limit=600 if record.trial else 900)
             record.sid=call.sid
             c.session.audit.append("outbound_call_created",call_sid=call.sid,
-                                   destination="configured_test_phone",question_limit=15,answer_recording=True)
+                                   destination="configured_test_phone",question_limit=15,answer_recording=record.stt_mode=="prisma_record",stt_provider=record.stt_mode)
             if record.phase=="cancelled":
                 await asyncio.to_thread(self.client().calls(call.sid).update,status="completed")
         except Exception as exc:
@@ -176,12 +198,19 @@ class CallService:
     def twiml(self,record,waiting=False):
         response=Element("Response")
         c=record.conversation
+        if record.trial and record.hops>=8 and c.session.status=="active":
+            c.session.status="human_review"
+            c.session.audit.append("session_finished",status="human_review",reason="Trial callback budget reached")
+            SubElement(response,"Say",language="en-US").text="The trial call limit was reached. Verification needs human review."
+            SubElement(response,"Hangup")
+            return tostring(response,encoding="unicode")
         if record.phase in {"failed","cancelled","completed"}:
             SubElement(response,"Hangup")
         elif waiting or record.phase in {"preparing","processing"}:
             if "waiting" in record.audio:
                 SubElement(response,"Play").text=self.media_url(record,"waiting")
-            SubElement(response,"Pause",length="2")
+            record.hops+=1
+            SubElement(response,"Pause",length="8" if record.trial else "2")
             SubElement(response,"Redirect",method="POST").text=self.base()+f"/twilio/next/{record.id}"
         else:
             if c.turn in record.audio:
@@ -193,12 +222,41 @@ class CallService:
                 SubElement(response,"Hangup")
             else:
                 turn=quote(c.turn,safe=':')
+                if record.stt_mode=="gather":
+                    record.hops+=1
+                    SubElement(response,"Gather",input="speech",language="hi-IN" if c.tts_language=="hi-en" else c.tts_language,
+                        speechTimeout="3",timeout="8",actionOnEmptyResult="true",method="POST",
+                        action=self.base()+f"/twilio/gathered/{record.id}/{turn}")
+                    return tostring(response,encoding="unicode")
                 SubElement(response,"Record",action=self.base()+f"/twilio/recorded/{record.id}/{turn}",
                     method="POST",maxLength="25",timeout="3",playBeep="true",finishOnKey="#",
                     recordingStatusCallback=self.base()+f"/twilio/ready/{record.id}/{turn}",
                     recordingStatusCallbackMethod="POST",recordingStatusCallbackEvent="completed absent")
                 SubElement(response,"Redirect",method="POST").text=self.base()+f"/twilio/next/{record.id}"
         return tostring(response,encoding="unicode")
+
+    async def gathered(self,record,turn,answer,confidence=None):
+        async with record.lock:
+            if record.stt_mode!="gather" or turn!=record.conversation.turn or turn in record.submitted_turns or record.phase in {"cancelled","failed","completed"}:
+                return
+            record.submitted_turns.add(turn)
+            record.pending_turn=turn
+            record.processing_since=time.time()
+            record.phase="processing"
+            try:
+                changed=await asyncio.to_thread(record.conversation.receive_transcript,answer,self.scorer,
+                    {"provider":"twilio_gather","confidence":confidence,"language":record.conversation.tts_language})
+                if record.phase in {"cancelled","completed"}:return
+                if not changed:raise ValueError("No usable transcript")
+                audio=await asyncio.to_thread(record.conversation.speak,self.synthesizer)
+                if audio is None:raise ValueError("TTS failed")
+                record.audio[record.conversation.turn]=audio
+                record.pending_turn=None
+                if record.phase not in {"cancelled","completed"}:record.phase="ready"
+            except Exception as exc:
+                await self.escalate(record,type(exc).__name__)
+            finally:
+                record.processing_since=None
 
     async def recording_ready(self,record,turn,recording_sid):
         async with record.lock:
@@ -256,4 +314,4 @@ class CallService:
         s=record.conversation.session
         return {"id":record.id,"phase":record.phase,"verification_status":s.status,"checks_passed":len(s.results),
                 "questions_selected":len(s.pack["clauses"]),"answer_turns":s.answer_turns,
-                "error":record.error,"last_assessment":record.conversation.history[-1] if record.conversation.history else None}
+                "stt_provider":record.stt_mode,"trial":record.trial,"callback_hops":record.hops,"error":record.error,"last_assessment":record.conversation.history[-1] if record.conversation.history else None}
