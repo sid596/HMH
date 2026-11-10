@@ -5,7 +5,7 @@ from pathlib import Path
 import streamlit as st
 from engine.provider_errors import ModelRequestError
 from engine.localization import PROFILES
-from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack, ranked_topics, MAX_QUESTIONS, TopicValidationError
+from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack, ranked_topics, MAX_QUESTIONS, TopicValidationError, strict_topic_output_enabled, TOPIC_PROMPT_VERSION
 from app.recording import recording_panel
 from app.outbound import render_outbound
 
@@ -56,6 +56,8 @@ def render_builder(root):
             requests = len(chunks(document))
             st.caption(f"{len(document['pages'])} readable pages · {requests} sections, processed in parallel. Automatic language detection and cross-reference checks may add requests. Repeated results are reused within this session.")
             configured = bool(os.getenv("SCORER_API_KEY") and os.getenv("SCORER_MODEL"))
+            output_mode="strict schema" if strict_topic_output_enabled() else "JSON with local validation"
+            st.caption(f"Topic engine: {TOPIC_PROMPT_VERSION} · Model: {os.getenv('SCORER_MODEL','not configured')} · {output_mode}")
             if not configured:
                 st.info("Add SCORER_API_KEY and SCORER_MODEL in Streamlit Secrets to generate topics. The example workspace works without keys.")
             if st.button("Generate topic library", type="primary", disabled=not synthetic or not configured):

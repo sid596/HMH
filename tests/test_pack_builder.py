@@ -177,3 +177,14 @@ class PackBuilderTests(unittest.TestCase):
         topic=deepcopy(catalog['topics'][0]);topic['misconceptions']=[]
         with self.assertRaisesRegex(TopicValidationError,'misconceptions.*0 items'):
             validate_topics({'topics':[topic],'unresolved':[]},catalog['document']['pages'])
+
+    def test_strict_output_supports_other_current_openai_models_but_not_arbitrary_endpoints(self):
+        import os
+        from unittest.mock import patch
+        from engine.pack_builder import strict_topic_output_enabled
+        with patch.dict(os.environ,{'SCORER_BASE_URL':'https://api.openai.com/v1'},clear=True):
+            for model in ['gpt-5.4-mini','gpt-4o-mini','gpt-4.1-mini','gpt-6-luna']:
+                with patch.dict(os.environ,{'SCORER_MODEL':model}):
+                    self.assertTrue(strict_topic_output_enabled(),model)
+            with patch.dict(os.environ,{'SCORER_MODEL':'gpt-6-luna','SCORER_BASE_URL':'https://other.example/v1'}):
+                self.assertFalse(strict_topic_output_enabled())

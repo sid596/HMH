@@ -15,7 +15,7 @@ from engine.localization import localized_pack, PROFILES
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 300
 MAX_QUESTIONS = 15
-TOPIC_PROMPT_VERSION = "topic-draft-8-strict-schema"
+TOPIC_PROMPT_VERSION = "topic-draft-9-strict-models"
 
 
 class TopicValidationError(ValueError):
@@ -101,12 +101,16 @@ def document_reasoning_effort():
     return None
 
 
-def topic_model_json(system, payload):
-    # Limit this latency tuning to document drafting. The comprehension scorer
-    # and prior-call analyser keep their existing provider settings.
+def strict_topic_output_enabled():
     host=urlsplit(os.getenv("SCORER_BASE_URL","https://api.openai.com/v1")).hostname
     model=os.getenv("SCORER_MODEL","")
-    schema=topic_response_schema() if system==EXTRACT_PROMPT and host=="api.openai.com" and (model=="gpt-6-luna" or model.startswith("gpt-6-luna-")) else None
+    # These GPT families support strict structured output. Do not infer that
+    # an arbitrary third-party OpenAI-compatible endpoint supports it.
+    return host=="api.openai.com" and model.startswith(("gpt-4o","gpt-4.1","gpt-5","gpt-6"))
+
+
+def topic_model_json(system, payload):
+    schema=topic_response_schema() if system==EXTRACT_PROMPT and strict_topic_output_enabled() else None
     return model_json(system, payload, reasoning_effort=document_reasoning_effort(),response_schema=schema)
 
 
