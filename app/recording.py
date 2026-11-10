@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import hashlib
 import streamlit as st
+import httpx
 from engine.call_context import wav_segments, transcribe_recording, analyse_context, suggest_transcript_review
 from voice.gnani import transcribe
 from engine.audio_import import normalize_recording
@@ -16,6 +17,7 @@ def recording_panel(catalog):
             format_func=lambda k:{"unknown":"Mono/mixed or unknown speakers","agent_left":"Stereo: agent left, customer right","customer_left":"Stereo: customer left, agent right"}[k])
         st.caption("Channel labels must be known from the recording setup. Mixed audio does not provide reliable agent/customer labels. Chunk boundaries can affect recognition.")
         listening_language=st.selectbox("Recording language",["indic-auto","en-IN","hi-IN","mr-IN","kn-IN"],help="Choose the main spoken language when known. Auto detection can be less reliable on short or mixed clips.")
+        workers=st.selectbox("Concurrent transcription requests",[1,2,3],help="Start with 1. Higher values can be faster, but may exceed Gnani account limits. Completed clips are reused after errors.")
         synthetic = st.checkbox("This is a synthetic test conversation; I may upload it to Gnani and the configured text-model provider.",key="call_context_permission")
         if not os.getenv("GNANI_API_KEY"):
             st.info("Configure GNANI_API_KEY to transcribe a recording.")
@@ -38,17 +40,26 @@ def recording_panel(catalog):
                     cached_clips=(clip_key,len(wav_segments(audio,mapping)))
                     st.session_state.prior_clip_count=cached_clips
                 count=cached_clips[1]
-                st.caption(f"{count} Prisma request(s), processed up to 3 at a time, then 1 text-model request to link it to topics.")
+                st.caption(f"{count} Prisma request(s), processed up to {workers} at a time, then 1 text-model request to link it to topics.")
                 if st.button("Transcribe previous call",disabled=not synthetic or not os.getenv("GNANI_API_KEY")):
                     bar=st.progress(0,text="Transcribing synthetic call…")
                     try:
-                        transcript=transcribe_recording(audio,transcribe,mapping,language=listening_language,cache=st.session_state.setdefault("prisma_clip_cache",{}),
+                        transcript=transcribe_recording(audio,transcribe,mapping,language=listening_language,max_workers=workers,cache=st.session_state.setdefault("prisma_clip_cache",{}),
                             progress=lambda n,total:bar.progress(n/total,text=f"Transcribed {n}/{total} clips"))
                         transcript["original_sha256"]=audio_hash
                         transcript["source_filename"]=upload.name
                         st.session_state.prior_transcript=transcript
                         st.session_state.pop("transcript_suggestions",None)
                         st.success("Transcript ready. Check the text and speaker labels below before linking it to topics.")
+                    except httpx.HTTPStatusError as exc:
+                        status=exc.response.status_code
+                        actions={429:"Gnani limited request traffic or quota. Keep concurrency at 1, check credits/limits, and retry explicitly after waiting.",
+                            401:"Gnani rejected the API key. Check GNANI_API_KEY in Streamlit Secrets.",
+                            403:"Gnani denied this request. Check account permissions and credits.",
+                            400:"Gnani rejected the audio or selected language. Try the recording's main language explicitly.",
+                            413:"Gnani rejected the clip size."}
+                        st.error(f"Prisma transcription rejected (HTTP {status}). "+actions.get(status,"Gnani returned a service error. Check its dashboard and retry explicitly later."))
+                        st.caption("Successful clips remain cached in this session. No automatic retry was made; no partial call context was accepted.")
                     except Exception as exc:
                         st.error(f"Transcription stopped ({type(exc).__name__}). No call context was accepted.")
             except ValueError as exc:

@@ -113,10 +113,10 @@ class ParallelTranscriptionTests(unittest.TestCase):
             return {'transcript':'Recognized words'}
         caller=Mock(side_effect=stt)
         cache={}
-        result=transcribe_recording(wav(51),caller,language='en-IN',cache=cache)
+        result=transcribe_recording(wav(51),caller,language='en-IN',cache=cache,max_workers=3)
         self.assertEqual([s['start_seconds'] for s in result['segments']],[0,25,50])
         self.assertEqual(caller.call_count,3)
-        again=transcribe_recording(wav(51),caller,language='en-IN',cache=cache)
+        again=transcribe_recording(wav(51),caller,language='en-IN',cache=cache,max_workers=3)
         self.assertEqual(caller.call_count,3)
         self.assertEqual(again['performance']['reused_clips'],3)
 
@@ -135,3 +135,24 @@ class QuietBoundaryTests(unittest.TestCase):
         for c in clips:
             with wave.open(io.BytesIO(c['audio'])) as w:frames+=w.getnframes()
         self.assertEqual(frames,len(samples))
+
+
+class TranscriptionFailureCacheTests(unittest.TestCase):
+    def test_successful_clip_is_reused_after_explicit_retry(self):
+        import httpx
+        calls=0
+        def provider(audio,language):
+            nonlocal calls
+            calls+=1
+            if calls==2:
+                response=httpx.Response(429,request=httpx.Request('POST','https://example.test'))
+                raise httpx.HTTPStatusError('private provider message',request=response.request,response=response)
+            return {'transcript':'Recognized speech'}
+        cache={}
+        with self.assertRaises(httpx.HTTPStatusError):
+            transcribe_recording(wav(26),provider,cache=cache,max_workers=1)
+        self.assertEqual(len(cache),1)
+        result=transcribe_recording(wav(26),provider,cache=cache,max_workers=1)
+        self.assertEqual(calls,3)
+        self.assertEqual(result['performance']['reused_clips'],1)
+        self.assertEqual(len(result['segments']),2)

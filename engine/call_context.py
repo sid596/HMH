@@ -62,8 +62,9 @@ def wav_segments(content, channel_roles="unknown"):
     return result
 
 
-def transcribe_recording(content, transcriber, channel_roles="unknown", progress=None, *, language="indic-auto", cache=None):
+def transcribe_recording(content, transcriber, channel_roles="unknown", progress=None, *, language="indic-auto", cache=None, max_workers=1):
     started=perf_counter()
+    if type(max_workers) is not int or not 1<=max_workers<=3:raise ValueError("Use 1–3 concurrent transcription requests")
     clips = wav_segments(normalize_recording(content), channel_roles)
     cache=cache if cache is not None else {}
     results=[None]*len(clips)
@@ -76,7 +77,7 @@ def transcribe_recording(content, transcriber, channel_roles="unknown", progress
         else:pending.append((i,clip,key))
     completed=reused
     if progress:progress(completed,len(clips))
-    with ThreadPoolExecutor(max_workers=min(3,max(1,len(pending)))) as pool:
+    with ThreadPoolExecutor(max_workers=min(max_workers,max(1,len(pending)))) as pool:
         futures={pool.submit(transcriber,clip["audio"],language=language):(i,key) for i,clip,key in pending}
         failure=None
         for future in as_completed(futures):
@@ -95,7 +96,7 @@ def transcribe_recording(content, transcriber, channel_roles="unknown", progress
     if not segments:raise ValueError("No speech was recognized")
     return {"sha256":hashlib.sha256(content).hexdigest(),"segments":segments,
         "speaker_attribution":"channel_mapping" if any(s["speaker"]!="unknown" for s in segments) else "not_verified",
-        "performance":{"seconds":round(perf_counter()-started,2),"reused_clips":reused,"clips":len(clips)},
+        "performance":{"seconds":round(perf_counter()-started,2),"reused_clips":reused,"clips":len(clips),"workers":max_workers},
         "note":"Raw Prisma output. Recognition and mixed-speaker errors require review."}
 
 
