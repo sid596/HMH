@@ -205,3 +205,36 @@ class ContextEvidenceReferenceTests(unittest.TestCase):
         caller=Mock(return_value={'notes':[{'topic_id':'cancellation','evidence_id':'evidence_9999','kind':'confusion','observation':'test'}],'preferred_language':None,'preference_evidence':None})
         with self.assertRaisesRegex(ValueError,'unknown transcript evidence ID'):
             analyse_context(sample_catalog('en-IN'),self.transcript(),caller)
+
+class RelatedTopicPriorityTests(unittest.TestCase):
+    def relationship(self):
+        return {'topic_id':'early_exit','anchor_topic_id':'cancellation','relationship':'condition',
+                'topic_fact_indices':[0],'anchor_fact_indices':[0],'reason':'Both concern leaving the product and the applicable conditions.'}
+
+    def test_direct_then_related_then_unaffected_within_risk_tier(self):
+        from engine.call_context import validate_related_topics
+        catalog=sample_catalog('en-IN')
+        for topic in catalog['topics']:topic['required']=False
+        notes=[{'topic_id':'cancellation','kind':'customer_question'}]
+        catalog['call_context']={'notes':notes,'related_topics':validate_related_topics([self.relationship()],catalog,notes)}
+        for t in catalog['topics']:t['priority_score']=100 if t['id']=='returns' else 1
+        ordered=[t['id'] for t in ranked_topics(catalog)]
+        self.assertEqual(ordered[:2],['cancellation','early_exit'])
+        saved=compile_pack(catalog,{t['id'] for t in catalog['topics']},'Reviewer')
+        self.assertEqual([c['id'] for c in saved['clauses']],ordered)
+        next(t for t in catalog['topics'] if t['id']=='early_exit')['risk']='standard'
+        self.assertLess([t['id'] for t in ranked_topics(catalog)].index('returns'),[t['id'] for t in ranked_topics(catalog)].index('early_exit'))
+
+    def test_invalid_anchors_or_invented_facts_cannot_promote_topics(self):
+        from engine.call_context import validate_related_topics
+        catalog=sample_catalog('en-IN');notes=[{'topic_id':'cancellation','kind':'confusion'}]
+        for change in ({'anchor_topic_id':'returns'},{'topic_id':'invented'},{'topic_fact_indices':[999]},{'topic_id':'cancellation'}):
+            with self.assertRaises(ValueError):validate_related_topics([self.relationship()|change],catalog,notes)
+
+    def test_related_topics_do_not_enter_pack_without_selection(self):
+        from engine.call_context import validate_related_topics
+        catalog=sample_catalog('en-IN');notes=[{'topic_id':'cancellation','kind':'confusion'}]
+        catalog['call_context']={'notes':notes,'related_topics':validate_related_topics([self.relationship()],catalog,notes)}
+        saved=compile_pack(catalog,{'contribution','returns','cancellation'},'Reviewer')
+        self.assertNotIn('early_exit',[c['id'] for c in saved['clauses']])
+        self.assertEqual(saved['call_context']['related_topics'][0]['topic_id'],'early_exit')

@@ -109,6 +109,13 @@ def render_builder(root):
     selected = st.session_state[selection_key]
     selected.update(t["id"] for t in catalog["topics"] if t["required"])
     topics = ranked_topics(catalog)
+    call_context=catalog.get("call_context",{})
+    direct_ids={n["topic_id"] for n in call_context.get("notes",[]) if n["kind"]!="mentioned"}
+    related=call_context.get("related_topics",[])
+    by_id={t["id"]:t for t in topics}
+    omitted_context=(direct_ids|{r["topic_id"] for r in related})-selected
+    if omitted_context:
+        st.info(f"{len(omitted_context)} call-related topics are not selected. Review the highlighted cards; they will not be asked unless added to the pack.")
     m1,m2,m3 = st.columns(3)
     m1.metric("Topics to review", len(topics))
     m2.metric("In your pack", len(selected))
@@ -141,6 +148,14 @@ def render_builder(root):
                         else:
                             selected.add(topic["id"])
                         st.rerun()
+                if topic["id"] in direct_ids:
+                    st.caption("↑ DIRECT CALL CONTEXT · Evidence found in the reviewed conversation")
+                elif any(r["topic_id"]==topic["id"] for r in related):
+                    for relation in related:
+                        if relation["topic_id"]==topic["id"]:
+                            anchor=by_id[relation["anchor_topic_id"]]
+                            st.caption("↑ RELATED TO: "+anchor["title"]+" · "+relation["relationship"])
+                            st.caption(relation["reason"])
                 st.write(topic["summary"])
                 st.caption("Question: " + topic["question"])
                 with st.expander("Source & assessment rubric"):

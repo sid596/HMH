@@ -284,8 +284,9 @@ def detect_document_language(document, caller=topic_model_json):
 
 def ranked_topics(catalog):
     context_ids = {n["topic_id"] for n in catalog.get("call_context",{}).get("notes",[]) if n["kind"] != "mentioned"}
+    related_ids={r["topic_id"] for r in catalog.get("call_context",{}).get("related_topics",[])}
     return sorted(catalog["topics"], key=lambda t: (not t["required"], t["risk"] != "high",
-                  t["id"] not in context_ids, -t.get("priority_score",75 if t["risk"]=="high" else 25),
+                  0 if t["id"] in context_ids else 1 if t["id"] in related_ids else 2, -t.get("priority_score",75 if t["risk"]=="high" else 25),
                   min(s["page"] for s in t["sources"]), t["id"]))
 
 def generate_catalog(document, language, progress=None, caller=None, *, cache=None, max_workers=None):

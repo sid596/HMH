@@ -107,6 +107,8 @@ def recording_panel(catalog):
         context=catalog.get("call_context")
         if context:
             st.success(f"{len(context['notes'])} source-linked call notes added. Discussion never counts as a teach-back pass.")
+            if context.get("related_topics"):
+                st.caption(f"{len(context['related_topics'])} related-topic links also influence library and saved-pack order within risk tiers.")
             excluded_count=len(context["transcript"].get("excluded_unknown_segments",[]))
             if excluded_count:st.caption(f"Excluded {excluded_count} unknown-speaker turns from prioritisation; original text retained in the context record.")
             if context["preferred_language"]:
