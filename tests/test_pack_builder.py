@@ -152,3 +152,28 @@ class PackBuilderTests(unittest.TestCase):
         with patch("engine.pack_builder.detect_document_language",side_effect=AssertionError("Must skip detection")):
             result=generate_catalog(catalog["document"],"en-IN",caller=caller)
         self.assertEqual(result["language"],"en-IN")
+
+    def test_topic_request_uses_strict_schema_on_configured_openai_model(self):
+        import os,httpx
+        from unittest.mock import patch
+        from engine.pack_builder import topic_model_json,EXTRACT_PROMPT
+        response=httpx.Response(200,json={'choices':[{'message':{'content':'{"topics":[],"unresolved":[]}'},'finish_reason':'stop'}]})
+        with patch.dict(os.environ,{'SCORER_API_KEY':'test-key','SCORER_MODEL':'gpt-6-luna','SCORER_BASE_URL':'https://api.openai.com/v1'},clear=True),patch('httpx.post',return_value=response) as post:
+            topic_model_json(EXTRACT_PROMPT,{'pages':[],'language':'English'})
+            fmt=post.call_args.kwargs['json']['response_format']
+            self.assertEqual(fmt['type'],'json_schema')
+            self.assertTrue(fmt['json_schema']['strict'])
+            topic=fmt['json_schema']['schema']['properties']['topics']['items']
+            self.assertEqual(topic['properties']['must_have_facts']['maxItems'],6)
+            self.assertEqual(topic['properties']['misconceptions']['minItems'],1)
+            self.assertFalse(topic['additionalProperties'])
+
+    def test_rubric_error_identifies_field_and_count_without_silently_dropping_facts(self):
+        from engine.pack_builder import TopicValidationError
+        catalog=sample_catalog('en-IN')
+        topic=deepcopy(catalog['topics'][0]);topic['must_have_facts']=['A required fact']*7
+        with self.assertRaisesRegex(TopicValidationError,'must_have_facts.*7 items'):
+            validate_topics({'topics':[topic],'unresolved':[]},catalog['document']['pages'])
+        topic=deepcopy(catalog['topics'][0]);topic['misconceptions']=[]
+        with self.assertRaisesRegex(TopicValidationError,'misconceptions.*0 items'):
+            validate_topics({'topics':[topic],'unresolved':[]},catalog['document']['pages'])

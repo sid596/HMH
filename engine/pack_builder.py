@@ -15,7 +15,7 @@ from engine.localization import localized_pack, PROFILES
 MAX_PDF_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 300
 MAX_QUESTIONS = 15
-TOPIC_PROMPT_VERSION = "topic-draft-7-language-excerpts"
+TOPIC_PROMPT_VERSION = "topic-draft-8-strict-schema"
 
 
 class TopicValidationError(ValueError):
@@ -65,7 +65,7 @@ def chunks(document, limit=6000):
     return result
 
 
-def model_json(system, payload, *, reasoning_effort=None):
+def model_json(system, payload, *, reasoning_effort=None, response_schema=None):
     import httpx
     key, model = os.getenv("SCORER_API_KEY"), os.getenv("SCORER_MODEL")
     if not key or not model:
@@ -73,12 +73,19 @@ def model_json(system, payload, *, reasoning_effort=None):
     body={"model": model, "messages": [{"role": "system", "content": system + "\nReturn exactly one JSON object. Do not wrap it in Markdown."},
          {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
          "response_format": {"type": "json_object"}}
+    if response_schema is not None:
+        body["response_format"]={"type":"json_schema","json_schema":{"name":"verification_topics","strict":True,"schema":response_schema}}
     if reasoning_effort is not None:
         body["reasoning_effort"] = reasoning_effort
     response = httpx.post(os.getenv("SCORER_BASE_URL", "https://api.openai.com/v1").rstrip("/") + "/chat/completions",
         headers={"Authorization": f"Bearer {key}"}, json=body, timeout=120)
     check_model_response(response)
-    return json.loads(response.json()["choices"][0]["message"]["content"])
+    choice=response.json()["choices"][0]
+    if choice.get("finish_reason") == "length":
+        raise TopicValidationError("The model response was cut off before completion. No partial topics were accepted.")
+    if choice["message"].get("refusal"):
+        raise TopicValidationError("The model declined to generate this section. No topics were accepted.")
+    return json.loads(choice["message"]["content"])
 
 
 def document_reasoning_effort():
@@ -97,7 +104,10 @@ def document_reasoning_effort():
 def topic_model_json(system, payload):
     # Limit this latency tuning to document drafting. The comprehension scorer
     # and prior-call analyser keep their existing provider settings.
-    return model_json(system, payload, reasoning_effort=document_reasoning_effort())
+    host=urlsplit(os.getenv("SCORER_BASE_URL","https://api.openai.com/v1")).hostname
+    model=os.getenv("SCORER_MODEL","")
+    schema=topic_response_schema() if system==EXTRACT_PROMPT and host=="api.openai.com" and (model=="gpt-6-luna" or model.startswith("gpt-6-luna-")) else None
+    return model_json(system, payload, reasoning_effort=document_reasoning_effort(),response_schema=schema)
 
 
 EXTRACT_PROMPT = '''Draft verification topics from the supplied synthetic policy pages.
@@ -121,6 +131,20 @@ No more than 15 topics per response; if more are needed say so in unresolved. Ri
 for a human reviewer, never an authority to declare a topic mandatory.'''
 
 
+def topic_response_schema():
+    def obj(properties):
+        return {"type":"object","properties":properties,"required":list(properties),"additionalProperties":False}
+    def array(items,minimum,maximum):
+        return {"type":"array","items":items,"minItems":minimum,"maxItems":maximum}
+    text={"type":"string","minLength":1}
+    fields={name:dict(text) for name in ("title","category","summary","explain","question","fallback_explain","risk_reason")}
+    fields.update(must_have_facts=array(text,1,6),misconceptions=array(text,1,5),
+        risk={"type":"string","enum":["high","standard"]},
+        priority_score={"type":"integer","minimum":1,"maximum":100},
+        sources=array(obj({"page":{"type":"integer","minimum":1},"quote":text}),1,4))
+    return obj({"topics":array(obj(fields),0,15),"unresolved":{"type":"array","items":text}})
+
+
 def validate_topics(raw, pages):
     if not isinstance(raw, dict) or not isinstance(raw.get("topics"), list) or not isinstance(raw.get("unresolved"), list):
         raise TopicValidationError("Invalid topic generator response")
@@ -129,14 +153,17 @@ def validate_topics(raw, pages):
     page_text = {}
     for page in pages:
         page_text[page["page"]] = normalize(page_text.get(page["page"], "") + " " + page["text"])
-    for topic in raw["topics"]:
+    for topic_number,topic in enumerate(raw["topics"],1):
+        if not isinstance(topic,dict):
+            raise TopicValidationError(f"Topic {topic_number} must be an object")
         for field in ("title", "category", "summary", "explain", "question", "fallback_explain", "risk_reason"):
             if not isinstance(topic.get(field), str) or not topic[field].strip():
                 raise TopicValidationError("Missing topic text: " + field)
         for field, maximum in (("must_have_facts", 6), ("misconceptions", 5)):
             values = topic.get(field)
             if not isinstance(values, list) or not 1 <= len(values) <= maximum or not all(isinstance(v, str) and v.strip() for v in values):
-                raise TopicValidationError("Invalid facts or misconceptions")
+                detail=f"{len(values)} items" if isinstance(values,list) else f"type {type(values).__name__}"
+                raise TopicValidationError(f"Topic {topic_number}: {field} needs 1–{maximum} nonempty strings; received {detail}")
         if topic.get("risk") not in ("high", "standard"):
             raise TopicValidationError("Invalid risk level")
         sources = topic.get("sources")
