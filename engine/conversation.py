@@ -3,7 +3,7 @@ import hashlib
 import io
 import wave
 from engine.provider_errors import ModelRequestError
-from engine.core import Session
+from engine.core import Session, understanding_score
 from engine.localization import localized_pack
 
 
@@ -102,7 +102,7 @@ class Conversation:
             self.completed.add(token)
             self.failed.discard(token)
             self.error = None
-            self.history.append({"answer": answer, "verdict": evidence.verdict, "action": action})
+            self.history.append({"answer": answer, "verdict": "understood" if action == "pass" else evidence.verdict, "rubric_verdict":evidence.verdict, "understanding_score":understanding_score(evidence), "action": action})
             return True
         except Exception as exc:
             self.failed.add(token)
@@ -122,5 +122,5 @@ class Conversation:
         evidence = scorer(answer, self.session.clause)
         action = self.session.submit(answer, evidence, source="twilio_gather", transcript_metadata=metadata or {})
         self.session.audit.append("transcription", transcript=answer, metadata=metadata or {}, provider="twilio_gather")
-        self.history.append({"answer": answer, "verdict": evidence.verdict, "action": action})
+        self.history.append({"answer": answer, "verdict": "understood" if action == "pass" else evidence.verdict, "rubric_verdict":evidence.verdict, "understanding_score":understanding_score(evidence), "action": action})
         return True

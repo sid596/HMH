@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import uuid
 
 VERDICTS = {"understood", "partial", "misunderstood", "no_evidence"}
+MIN_UNDERSTANDING = 0.75
 MAX_RETRIES = 2
 
 
@@ -65,8 +66,13 @@ class Evidence:
         return cls(**raw)
 
 
+def understanding_score(evidence):
+    total=len(evidence.facts_present)+len(evidence.facts_missing)
+    return len(evidence.facts_present)/total if total else 0.0
+
+
 def decide(evidence, critical, attempt):
-    if evidence.verdict == "understood":
+    if not evidence.misconception_detected and understanding_score(evidence)>=MIN_UNDERSTANDING:
         return "pass"
     return "retry" if attempt <= MAX_RETRIES else "escalate"
 
@@ -128,7 +134,7 @@ class Session:
             action = "escalate"
         self.audit.append("assessment", total_answer_turns=self.answer_turns, question_budget_exhausted=budget_exhausted, clause_id=self.clause["id"], attempt=self.attempt,
                           answer=answer, input_source=source, transcript_metadata=transcript_metadata,
-                          evidence=asdict(evidence), action=action)
+                          evidence=asdict(evidence), understanding_score=understanding_score(evidence), understanding_threshold=MIN_UNDERSTANDING, action=action)
         if action == "retry":
             self.prompt()
         elif action == "escalate":

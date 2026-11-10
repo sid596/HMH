@@ -71,3 +71,34 @@ class PolicyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnderstandingThresholdTests(unittest.TestCase):
+    def evidence(self,present,missing,contradiction=False,confidence=0.5):
+        return Evidence(present,missing,contradiction,"misunderstood" if contradiction else "partial",confidence,"test")
+
+    def test_seventy_five_percent_advances_regardless_of_model_certainty(self):
+        for confidence in (0.1,0.74,0.99):
+            self.assertEqual(decide(self.evidence([0,1,2],[3],confidence=confidence),True,1),"pass")
+
+    def test_latest_call_four_of_five_advances_on_final_attempt(self):
+        self.assertEqual(decide(self.evidence([0,1,3,4],[2]),True,3),"pass")
+
+    def test_below_threshold_and_contradiction_do_not_pass(self):
+        self.assertEqual(decide(self.evidence([0,1,3],[2,4]),True,1),"retry")
+        self.assertEqual(decide(self.evidence([0,1,2],[3],True),True,1),"retry")
+        self.assertEqual(decide(self.evidence([0,1,3],[2,4]),True,3),"escalate")
+
+    def test_partial_threshold_pass_uses_positive_feedback(self):
+        from copy import deepcopy
+        from engine.conversation import Conversation
+        from engine.localization import localized_pack
+        pack=deepcopy(localized_pack('en-IN'))
+        pack['clauses'][0]['must_have_facts']=['one','two','three','four']
+        with tempfile.TemporaryDirectory() as d:
+            conversation=Conversation(pack,d,'en-IN','en-IN','Pranav')
+            evidence=self.evidence([0,1,2],[3])
+            self.assertTrue(conversation.receive_transcript('A paraphrase',lambda answer,clause:evidence))
+            self.assertEqual(conversation.history[-1]['verdict'],'understood')
+            self.assertEqual(conversation.history[-1]['rubric_verdict'],'partial')
+            self.assertEqual(conversation.session.index,1)

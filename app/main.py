@@ -53,7 +53,7 @@ with st.sidebar:
         st.rerun()
     with st.expander("Rubric and policy"):
         st.json(pack)
-        st.write("All required facts must be conveyed without contradiction. Two retries per topic; scorer confidence does not control progression. Exhausted retries or processing failures require human review.")
+        st.write("At least 75% of rubric facts conveyed without contradiction advances to the next topic. Facts have equal weight. Two retries per topic; model confidence is diagnostic only. Processing failures and exhausted retries require human review.")
 
 render_outbound(pack)
 st.warning("Draft rubric and translations: native-speaker review pending. All amounts and terms are invented. This demo cannot certify legal consent or prove understanding.")
@@ -123,7 +123,7 @@ else:
         if conversation.history:
             last = conversation.history[-1]
             st.write("You said: " + last["answer"])
-            st.caption("Understanding: " + last["verdict"].replace("_", " "))
+            st.caption("Understanding: " + last["verdict"].replace("_", " ") + (f" · Rubric coverage: {last['understanding_score']:.0%}" if "understanding_score" in last else ""))
     if st.button("Stop and refer to a human"):
         session.status = "human_review"
         session.audit.append("session_finished", status="human_review", reason="manual_referral")

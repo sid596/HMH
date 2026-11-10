@@ -37,7 +37,7 @@ The browser microphone is for synthetic scripted speech only. Live flow: Timbre 
 
 ## Policy and review
 
-Four critical clauses, two retries per clause. The second retry uses a simpler explanation. All required facts must be present without contradiction. Scorer confidence is retained as diagnostic metadata only and never controls progression. Every selected topic requires all required facts without contradiction; partial understanding retries, even for topics labelled noncritical.
+Four critical clauses, two retries per clause. The second retry uses a simpler explanation. Scorer confidence is retained as diagnostic metadata only and never controls progression. At least 75% of rubric facts must be conveyed, with no detected contradiction. Facts currently have equal weight; this permits up to 25% of facts to remain unverified, and a pass is not full understanding. The percentage is rubric coverage, not model certainty.
 
 `packs/fictional_savings_v1.json` is a DRAFT. Both teammates should review every invented term, fact, misconception and Hindi–English script. Record reviewer and timestamp and increment the version only after review; the app never approves it itself. Draft sessions end in `demo_checks_passed`, never a legal-consent claim.
 
