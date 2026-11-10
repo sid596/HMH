@@ -5,7 +5,7 @@ from pathlib import Path
 import streamlit as st
 from engine.provider_errors import ModelRequestError
 from engine.localization import PROFILES
-from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack, ranked_topics, MAX_QUESTIONS, TopicValidationError, strict_topic_output_enabled, TOPIC_PROMPT_VERSION
+from engine.pack_builder import extract_document, chunks, generate_catalog, sample_catalog, compile_pack, ranked_topics, MAX_QUESTIONS, TopicValidationError, strict_topic_output_enabled, TOPIC_PROMPT_VERSION, unresolved_issues
 from app.recording import recording_panel
 from app.outbound import render_outbound
 
@@ -80,7 +80,10 @@ def render_builder(root):
             if st.session_state.get("catalog_scope") != scope:
                 return
     catalog = st.session_state.catalog
-    if catalog["document"]["kind"] != "sample_text" and catalog.get("prompt_version") != TOPIC_PROMPT_VERSION:
+    old_issues=catalog["unresolved"]
+    catalog["unresolved"]=unresolved_issues(old_issues)
+    catalog["generation_notes"]=list(dict.fromkeys(catalog.get("generation_notes",[])+[x for x in old_issues if x not in catalog["unresolved"]]))
+    if catalog["document"]["kind"] != "sample_text" and catalog.get("prompt_version") not in {TOPIC_PROMPT_VERSION,"topic-draft-10-language-guard"}:
         st.warning("This topic draft predates the latest validation checks. Generate the topic library again before reviewing or calling.")
         return
     language = catalog["language"]
@@ -178,7 +181,7 @@ def render_builder(root):
                 st.write("• " + issue)
         reviewer = st.text_input("Reviewer name", key="reviewer:" + state_key)
         checked = st.checkbox("I reviewed the source, wording and exclusions.", key="reviewed:" + state_key)
-        if st.button("Save reviewed demo pack", type="primary", disabled=not checked or len(selected)>MAX_QUESTIONS):
+        if st.button("Save reviewed demo pack", type="primary", disabled=not checked or len(selected)>MAX_QUESTIONS or bool(catalog["unresolved"])):
             try:
                 pack = compile_pack(catalog, selected, reviewer)
                 path = Path(root) / "data" / "packs"

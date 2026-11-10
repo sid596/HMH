@@ -204,3 +204,21 @@ class PackBuilderTests(unittest.TestCase):
         topic=deepcopy(sample_catalog("en-IN")["topics"][0])
         topic["sources"][0]["quote"]="Una cita de fuente puede permanecer en el idioma original del documento."
         validate_topic_language(topic,"en-IN")
+
+    def test_no_unresolved_success_notes_do_not_block_pack(self):
+        catalog=sample_catalog('en-IN')
+        catalog['unresolved']=['No unresolved items identified in this chunk.', 'No further unresolved points from this chunk.']
+        compiled=compile_pack(catalog,{t['id'] for t in catalog['topics']},'Reviewer')
+        self.assertEqual(compiled['review_record']['unresolved'],[])
+
+    def test_success_note_filter_preserves_real_issues_and_qualified_statements(self):
+        from engine.pack_builder import unresolved_issues
+        real=['Customer premium not specified','No unresolved issues except a contradictory waiting period.']
+        self.assertEqual(unresolved_issues(['No unresolved items identified in this chunk.']+real),real)
+
+    def test_validation_retains_success_notes_as_nonblocking_metadata(self):
+        catalog=sample_catalog('en-IN')
+        note='No further unresolved points from this chunk.'
+        result=validate_topics({'topics':deepcopy(catalog['topics']),'unresolved':[note]},catalog['document']['pages'])
+        self.assertEqual(result['unresolved'],[])
+        self.assertEqual(result['generation_notes'],[note])
