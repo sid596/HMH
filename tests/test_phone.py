@@ -253,3 +253,16 @@ class ZeroCodeDiagnosticTests(unittest.TestCase):
             self.assertNotIn(ENV['TWILIO_TO_NUMBER'],result)
             self.assertNotIn('private.example',result)
             self.assertNotIn('/errors/0',result)
+
+
+class TrialCreationParametersTests(unittest.IsolatedAsyncioTestCase):
+    async def test_trial_omits_disallowed_optional_creation_parameters(self):
+        with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,dict(ENV,PHONE_STT_MODE='gather'),clear=True):
+            client=Mock()
+            client.api.accounts.return_value.fetch.return_value=SimpleNamespace(type='Trial')
+            client.calls.create.return_value=SimpleNamespace(sid='CA'+'b'*32)
+            service=CallService(d,client_factory=lambda:client,synthesizer=Mock(return_value=b'RIFF_audio'))
+            record,_=service.create(pack(),'minimal_'+'x'*20)
+            await service.prepare_and_dial(record)
+            self.assertEqual(set(client.calls.create.call_args.kwargs),{'to','url','status_callback'})
+            self.assertEqual(record.phase,'dialing')

@@ -193,12 +193,16 @@ class CallService:
             if record.phase=="cancelled":
                 return
             record.phase="dialing"
-            call=await asyncio.to_thread(self.client().calls.create,
-                to=os.environ["TWILIO_TO_NUMBER"],from_=os.environ["TWILIO_FROM_NUMBER"],
-                url=self.base()+f"/twilio/answer/{record.id}",method="POST",
-                status_callback=self.base()+f"/twilio/status/{record.id}",
-                status_callback_event=["initiated","ringing","answered","completed"],
-                timeout=30,time_limit=600 if record.trial else 900)
+            parameters={"to":os.environ["TWILIO_TO_NUMBER"],
+                "url":self.base()+f"/twilio/answer/{record.id}",
+                "status_callback":self.base()+f"/twilio/status/{record.id}"}
+            # New trial accounts choose their shared caller number themselves.
+            # Do not send paid-account-only optional call parameters.
+            if not record.trial:
+                parameters.update(from_=os.environ["TWILIO_FROM_NUMBER"],method="POST",
+                    status_callback_event=["initiated","ringing","answered","completed"],
+                    timeout=30,time_limit=900)
+            call=await asyncio.to_thread(self.client().calls.create,**parameters)
             record.sid=call.sid
             c.session.audit.append("outbound_call_created",call_sid=call.sid,
                                    destination="configured_test_phone",question_limit=15,answer_recording=record.stt_mode=="prisma_record",stt_provider=record.stt_mode)
