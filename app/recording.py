@@ -91,6 +91,7 @@ def recording_panel(catalog):
                     st.rerun()
             st.caption("Edit recognised text or speaker labels if needed. Labels: agent, customer, unknown. Keep timing fields unchanged.")
             edited=st.text_area("Review transcript segments (JSON)",value=json.dumps(transcript["segments"],ensure_ascii=False,indent=2),height=200,key="prior_transcript_editor:"+transcript["sha256"]+hashlib.sha256(json.dumps(transcript["segments"],sort_keys=True).encode()).hexdigest()[:10])
+            st.caption("Only agent/customer-labelled turns will influence topic priority. Unknown-speaker turns are excluded; the original transcript is retained.")
             if st.button("Use reviewed call context",disabled=not synthetic):
                 try:
                     segments=json.loads(edited)
@@ -106,6 +107,8 @@ def recording_panel(catalog):
         context=catalog.get("call_context")
         if context:
             st.success(f"{len(context['notes'])} source-linked call notes added. Discussion never counts as a teach-back pass.")
+            excluded_count=len(context["transcript"].get("excluded_unknown_segments",[]))
+            if excluded_count:st.caption(f"Excluded {excluded_count} unknown-speaker turns from prioritisation; original text retained in the context record.")
             if context["preferred_language"]:
                 st.info("Explicit language preference found: "+context["preferred_language"]+". Choose that customer language when generating the pack.")
             for note in context["notes"]:

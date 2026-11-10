@@ -153,6 +153,13 @@ def suggest_transcript_review(transcript, caller=model_json):
 
 
 def analyse_context(catalog, transcript, caller=model_json):
+    original=deepcopy(transcript)
+    labelled=[{**deepcopy(s),"original_segment_index":i} for i,s in enumerate(transcript["segments"]) if s.get("speaker") in {"agent","customer"}]
+    excluded=[{**deepcopy(s),"original_segment_index":i} for i,s in enumerate(transcript["segments"]) if s.get("speaker")=="unknown"]
+    if not labelled:
+        raise ValueError("No agent/customer-labelled turns remain. Apply reviewed speaker suggestions or label the turns before prioritising topics. No model request was made.")
+    transcript={**transcript,"segments":labelled,"excluded_unknown_segments":excluded,
+                "transcript_before_filtering":original}
     segments = transcript["segments"]
     if sum(len(s["text"]) for s in segments) > 40000:
         raise ValueError("Use a shorter transcript for this prototype (up to 40,000 characters)")

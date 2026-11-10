@@ -46,9 +46,9 @@ class CallContextTests(unittest.TestCase):
         transcript={'segments':[{'speaker':'unknown','text':'Early withdrawal is completely free'}]}
         note={'topic_id':'early_exit','segment_index':0,'quote':'Early withdrawal is completely free','kind':'agent_claim','observation':'Potential contradiction'}
         caller=Mock(return_value={'preferred_language':None,'preference_evidence':None,'notes':[note]})
-        unknown=analyse_context(catalog,transcript,caller)
-        self.assertEqual(unknown['call_context']['notes'][0]['kind'],'mentioned')
-        self.assertEqual(unknown['call_context']['notes'][0]['speaker'],'unknown')
+        with self.assertRaisesRegex(ValueError,'No agent/customer-labelled turns'):
+            analyse_context(catalog,transcript,caller)
+        caller.assert_not_called()
         note['kind']='agent_claim'
         transcript['segments'][0]['speaker']='agent'
         result=analyse_context(catalog,transcript,caller)
@@ -165,3 +165,17 @@ class CleanupContractionTests(unittest.TestCase):
         result=suggest_transcript_review(raw,caller)
         self.assertEqual(result['segments'][0]['speaker'],'customer')
         self.assertEqual(result['segments'][0]['raw_text'],"I don't get a refund?")
+
+
+class UnknownTurnFilteringTests(unittest.TestCase):
+    def test_unknown_turns_are_not_sent_to_model_but_remain_in_record(self):
+        transcript={'segments':[{'speaker':'unknown','text':'Opening chatter'}, {'speaker':'customer','text':'I am confused about cancellation'}]}
+        caller=Mock(return_value={'notes':[{'topic_id':'cancellation','segment_index':0,'quote':'confused about cancellation','kind':'customer_question','observation':'Customer needs clarification'}],'preferred_language':None,'preference_evidence':None})
+        result=analyse_context(sample_catalog('en-IN'),transcript,caller)
+        sent=caller.call_args.args[1]['segments']
+        self.assertEqual(len(sent),1)
+        self.assertEqual(sent[0]['speaker'],'customer')
+        record=result['call_context']['transcript']
+        self.assertEqual(record['excluded_unknown_segments'][0]['text'],'Opening chatter')
+        self.assertEqual(record['transcript_before_filtering'],transcript)
+        self.assertEqual(len(transcript['segments']),2)
